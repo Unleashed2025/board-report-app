@@ -1,0 +1,2582 @@
+﻿<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Unleashed Board Reporting</title>
+  <link rel="icon" type="image/png" href="assets/team-unleashed-mark.png">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #08111f;
+      --bg-top: #10203c;
+      --surface: rgba(12, 24, 44, 0.86);
+      --surface-strong: #122542;
+      --surface-soft: rgba(255, 255, 255, 0.06);
+      --card: #ffffff;
+      --card-soft: #f5f8ff;
+      --ink: #0f1d34;
+      --ink-strong: #08111f;
+      --muted: #6a7a96;
+      --line: rgba(148, 163, 184, 0.24);
+      --line-strong: rgba(148, 163, 184, 0.34);
+      --brand: #40d8ff;
+      --brand-strong: #0ea5e9;
+      --accent: #8b5cf6;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --white: #ffffff;
+      --shadow: 0 24px 60px rgba(8, 17, 31, 0.25);
+      --radius: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      color: var(--white);
+      background:
+        radial-gradient(circle at top left, rgba(64, 216, 255, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(139, 92, 246, 0.18), transparent 26%),
+        linear-gradient(160deg, var(--bg-top), var(--bg) 52%, #060c17 100%);
+    }
+
+    .wrap {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-mark {
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: grid;
+      place-items: center;
+      backdrop-filter: blur(14px);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .brand-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-copy h1 {
+      margin: 0;
+      font-size: 1.95rem;
+      letter-spacing: -0.03em;
+    }
+
+    .brand-copy p {
+      margin: 4px 0 0;
+      color: rgba(226, 232, 240, 0.82);
+      font-size: 0.98rem;
+    }
+
+    .hero-badge-row,
+    .toolbar-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill,
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 0.83rem;
+      font-weight: 600;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(14px);
+    }
+
+    .home-screen,
+    .app-shell {
+      display: none;
+    }
+
+    .home-screen.active,
+    .app-shell.active {
+      display: block;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 32px;
+      border-radius: 30px;
+      background:
+        linear-gradient(135deg, rgba(13, 28, 53, 0.92), rgba(17, 38, 69, 0.88)),
+        url("assets/team-unleashed-logo-white.png") no-repeat right 32px bottom 28px / 240px auto;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: var(--shadow);
+      margin-bottom: 22px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -40px -60px auto;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(64, 216, 255, 0.26), transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+    }
+
+    .hero-eyebrow {
+      margin: 0 0 12px;
+      color: var(--brand);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+    }
+
+    .hero-copy h2 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1.04;
+      letter-spacing: -0.04em;
+    }
+
+    .hero-copy p {
+      margin: 0 0 18px;
+      color: rgba(226, 232, 240, 0.86);
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+
+    .hero-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .hero-stat {
+      padding: 16px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(14px);
+    }
+
+    .hero-stat strong {
+      display: block;
+      font-size: 1.35rem;
+      margin-bottom: 6px;
+    }
+
+    .hero-stat span {
+      color: rgba(226, 232, 240, 0.84);
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .hero-side {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(16px);
+    }
+
+    .hero-side img {
+      width: min(100%, 240px);
+      height: auto;
+    }
+
+    .hero-side h3 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .hero-side p {
+      margin: 0;
+      color: rgba(226, 232, 240, 0.84);
+      line-height: 1.55;
+    }
+
+    .choice-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
+      gap: 18px;
+    }
+
+    .choice-card {
+      padding: 26px;
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .choice-card h3 {
+      margin: 0 0 8px;
+      font-size: 1.45rem;
+    }
+
+    .choice-card p {
+      margin: 0 0 16px;
+      color: rgba(226, 232, 240, 0.86);
+      line-height: 1.6;
+    }
+
+    .feature-list {
+      display: grid;
+      gap: 10px;
+      margin: 0 0 18px;
+    }
+
+    .feature-item {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(226, 232, 240, 0.9);
+      font-size: 0.92rem;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 0.96rem;
+      font-weight: 700;
+      cursor: pointer;
+      color: #08111f;
+      background: linear-gradient(135deg, #67e8f9, #38bdf8);
+      box-shadow: 0 12px 24px rgba(56, 189, 248, 0.22);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 28px rgba(56, 189, 248, 0.24);
+    }
+
+    .btn.secondary {
+      color: var(--white);
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: none;
+    }
+
+    .password-box {
+      margin-top: 14px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .password-box input,
+    .toolbar input,
+    .toolbar select {
+      width: 100%;
+      min-width: 0;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.98);
+      color: var(--ink);
+      font-size: 0.94rem;
+      outline: none;
+    }
+
+    .password-box input:focus,
+    .toolbar input:focus,
+    .toolbar select:focus {
+      border-color: rgba(14, 165, 233, 0.55);
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+    }
+
+    .password-status {
+      min-height: 20px;
+      margin-top: 10px;
+      color: #fecaca;
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .app-frame {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.98));
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 14px;
+      padding: 22px;
+      background: linear-gradient(180deg, #10203c, #0f1d34);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .toolbar-group {
+      display: grid;
+      gap: 7px;
+      align-content: start;
+    }
+
+    .toolbar-group label {
+      color: rgba(226, 232, 240, 0.84);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      justify-content: space-between;
+    }
+
+    .toolbar-actions .btn {
+      width: 100%;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 16px 22px;
+      background: #eef5ff;
+      color: var(--ink);
+      border-bottom: 1px solid rgba(15, 29, 52, 0.08);
+    }
+
+    .status-text {
+      font-weight: 600;
+      color: #1f365d;
+    }
+
+    .report {
+      display: none;
+      padding: 22px;
+      color: var(--ink);
+    }
+
+    .report.active {
+      display: block;
+    }
+
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .report-header h2 {
+      margin: 0;
+      font-size: 1.8rem;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      color: var(--ink-strong);
+    }
+
+    .report-header p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      max-width: 840px;
+      line-height: 1.55;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 1.12rem;
+      letter-spacing: -0.02em;
+      color: var(--ink-strong);
+    }
+
+    .section-subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .kpi-card {
+      position: relative;
+      overflow: hidden;
+      padding: 18px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--card), var(--card-soft));
+      border: 1px solid rgba(15, 29, 52, 0.08);
+      box-shadow: 0 16px 34px rgba(15, 29, 52, 0.07);
+    }
+
+    .kpi-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -22px -32px auto;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(64, 216, 255, 0.22), transparent 72%);
+      pointer-events: none;
+    }
+
+    .kpi-label {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .kpi-value {
+      position: relative;
+      z-index: 1;
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--ink-strong);
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .chart-card,
+    .table-card {
+      border-radius: 22px;
+      background: var(--card);
+      border: 1px solid rgba(15, 29, 52, 0.08);
+      box-shadow: 0 16px 34px rgba(15, 29, 52, 0.06);
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 18px 20px 0;
+    }
+
+    .chart-wrap {
+      height: 320px;
+      padding: 14px 18px 18px;
+    }
+
+    .table-scroll {
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    th,
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(15, 29, 52, 0.08);
+      font-size: 0.91rem;
+      white-space: nowrap;
+      text-align: right;
+      color: var(--ink);
+      background: transparent;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #eef5ff;
+      color: #2b4268;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td:first-child,
+    td:nth-child(2),
+    th:first-child,
+    th:nth-child(2) {
+      text-align: left;
+    }
+
+    tr:nth-child(even) td {
+      background: rgba(238, 245, 255, 0.42);
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .empty-note {
+      padding: 18px 20px 22px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 1320px) {
+      .toolbar {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 1180px) {
+      .hero-grid,
+      .chart-grid,
+      .choice-grid,
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        background:
+          linear-gradient(135deg, rgba(13, 28, 53, 0.92), rgba(17, 38, 69, 0.88));
+      }
+
+      .hero-stat-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 840px) {
+      .wrap {
+        padding: 18px 12px 28px;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar,
+      .status-bar,
+      .report-header {
+        align-items: start;
+      }
+
+      .brand-copy h1 {
+        font-size: 1.5rem;
+      }
+
+      .hero,
+      .choice-card,
+      .report,
+      .toolbar,
+      .status-bar {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark">
+          <img src="assets/team-unleashed-mark.png" alt="Team Unleashed">
+        </div>
+        <div class="brand-copy">
+          <h1>Team Unleashed Board Reporting</h1>
+          <p>Desktop-ready sales, pipeline and board reporting for senior leaders and sales teams.</p>
+        </div>
+      </div>
+      <div class="toolbar-badges">
+        <span class="badge">Desktop launcher included</span>
+        <span class="badge">Sales Tracker + Board Plan</span>
+      </div>
+    </div>
+
+    <section id="homeScreen" class="home-screen active">
+      <div class="hero">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="hero-eyebrow">Team Unleashed reporting cockpit</p>
+            <h2>Turn raw tracker spreadsheets into board-ready reporting.</h2>
+            <p>
+              Upload the latest <strong>Sales Tracker</strong> and optional <strong>Board Business Plan</strong> to generate polished monthly, quarterly, annual and FY reporting with clearer visuals, pipeline movement, recurring GP coverage and salesperson performance tracking.
+            </p>
+            <div class="hero-badge-row">
+              <span class="pill">Executive overview</span>
+              <span class="pill">Salesperson scorecards</span>
+              <span class="pill">Recurring GP vs cost runway</span>
+            </div>
+            <div class="hero-stat-grid">
+              <div class="hero-stat">
+                <strong>2 roles</strong>
+                <span>Senior leader access with password protection, plus direct salesperson reporting.</span>
+              </div>
+              <div class="hero-stat">
+                <strong>2026-2027</strong>
+                <span>Forecast views across current month, quarter, FY, calendar 2026 and calendar 2027.</span>
+              </div>
+              <div class="hero-stat">
+                <strong>Desktop mode</strong>
+                <span>Launch the app in its own Edge window using the included Team Unleashed desktop launcher.</span>
+              </div>
+            </div>
+          </div>
+          <div class="hero-side">
+            <img src="assets/team-unleashed-logo-white.png" alt="Team Unleashed logo">
+            <div>
+              <h3>Built for presentable board updates</h3>
+              <p>Cleaner homepage, richer graphs, stronger KPI cards and more visual reporting so the numbers are easier to present and easier to understand.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="choice-grid">
+        <div class="choice-card">
+          <h3>Senior leader</h3>
+          <p>Executive reporting with closed won performance, recurring GP runway, business cost coverage and pipeline forecasting visuals.</p>
+          <div class="feature-list">
+            <div class="feature-item">Closed won revenue and GP split across recurring and non-recurring deals.</div>
+            <div class="feature-item">Forecast month charts, stage mix charts and recurring GP cost coverage graphs.</div>
+            <div class="feature-item">Password-protected access for leadership reporting.</div>
+          </div>
+          <div class="btn-row">
+            <button id="seniorLeaderBtn" class="btn" type="button">Open executive mode</button>
+          </div>
+
+          <div id="leaderPasswordBox" class="password-box hidden">
+            <input id="leaderPasswordInput" type="password" placeholder="Enter senior leader password">
+            <div class="btn-row">
+              <button id="leaderPasswordBtn" class="btn" type="button">Unlock executive report</button>
+            </div>
+            <div id="leaderPasswordStatus" class="password-status"></div>
+          </div>
+        </div>
+
+        <div class="choice-card">
+          <h3>Sales person</h3>
+          <p>Personal scorecard reporting with closed won GP, target tracking, commission tracking and cleaner pipeline visuals.</p>
+          <div class="feature-list">
+            <div class="feature-item">Monthly and quarterly target tracking against recurring and non-recurring GP.</div>
+            <div class="feature-item">Possible and weighted commission charts across the live pipeline.</div>
+            <div class="feature-item">No password required to access salesperson reporting.</div>
+          </div>
+          <div class="btn-row">
+            <button id="salesPersonBtn" class="btn secondary" type="button">Open salesperson mode</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="appScreen" class="app-shell">
+      <div class="app-frame">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <label for="fileInput">Sales Tracker workbook</label>
+            <input id="fileInput" type="file" accept=".xlsx,.xls">
+          </div>
+          <div class="toolbar-group">
+            <label for="businessPlanInput">Board business plan</label>
+            <input id="businessPlanInput" type="file" accept=".xlsx,.xls">
+          </div>
+          <div class="toolbar-group">
+            <label for="yearFilter">Reporting period</label>
+            <select id="yearFilter"></select>
+          </div>
+          <div id="salespersonGroup" class="toolbar-group hidden">
+            <label id="salespersonLabel" for="salespersonFilter">Salesperson</label>
+            <select id="salespersonFilter"></select>
+          </div>
+          <div class="toolbar-group">
+            <label>Current mode</label>
+            <div class="toolbar-badges">
+              <span id="modeBadge" class="badge">Mode</span>
+            </div>
+          </div>
+          <div class="toolbar-actions">
+            <button id="homeBtn" class="btn secondary" type="button">Back to homepage</button>
+            <div class="toolbar-badges">
+              <span class="badge">Desktop-ready view</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="status-bar">
+          <div id="status" class="status-text">Choose your workbook to load a report.</div>
+          <div class="toolbar-badges">
+            <span class="badge">Upload Sales Tracker first</span>
+            <span class="badge">Board plan is optional</span>
+          </div>
+        </div>
+
+        <section id="execReport" class="report">
+          <div class="report-header">
+            <div>
+              <h2>Senior exec overview</h2>
+              <p>Board-ready view of closed won performance, live pipeline, forecast timing and the recurring GP runway against monthly business costs.</p>
+            </div>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card"><div class="kpi-label">Closed Won Total Revenue</div><div id="execClosedTotalRevenue" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Closed Won Total GP</div><div id="execClosedTotalGp" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Closed Won Opportunities</div><div id="execClosedDeals" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Closed Won Recurring Revenue</div><div id="execClosedRecurringRevenue" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Closed Won Recurring GP</div><div id="execClosedRecurringGp" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Closed Won Non-Recurring Revenue</div><div id="execClosedNonRecurringRevenue" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Closed Won Non-Recurring GP</div><div id="execClosedNonRecurringGp" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Open Pipeline Opportunities</div><div id="execPipelineDeals" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Open Pipeline Revenue</div><div id="execOpenRevenue" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Open Pipeline GP</div><div id="execOpenGp" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Opportunities Added</div><div id="execOppsAdded" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Recurring GP Covers Cost In</div><div id="execCostCoverMonth" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Average Open Days</div><div id="execAvgOpenDays" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Average Days to Close</div><div id="execAvgDaysToClose" class="kpi-value">-</div></div>
+          </div>
+
+          <div class="chart-grid">
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">GP mix snapshot</h3>
+                <p class="section-subtitle">Closed won and open pipeline GP split across recurring and non-recurring deal types.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="execMixChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">Pipeline by forecast month</h3>
+                <p class="section-subtitle">Shows where forecasted pipeline GP is expected to land across each month in the selected period.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="execPipelineMonthChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">Pipeline by stage</h3>
+                <p class="section-subtitle">Stage-level GP concentration across the live pipeline.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="execStageChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">Recurring GP vs monthly business costs</h3>
+                <p class="section-subtitle">Recurring GP trajectory against monthly cost coverage across 2026 and 2027.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="execCostCoverageChart"></canvas></div>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Recurring GP vs monthly business costs</h3>
+              <p class="section-subtitle">Shows the forecast monthly recurring GP, monthly cost and the resulting gap or surplus.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Monthly Recurring GP</th>
+                    <th>Monthly Cost</th>
+                    <th>Gap / Surplus</th>
+                    <th>Status</th>
+                    <th>Contributing Deals</th>
+                  </tr>
+                </thead>
+                <tbody id="execCostCoverageBody"></tbody>
+              </table>
+            </div>
+            <div id="execCostCoverageEmpty" class="empty-note hidden">Upload the board business plan workbook to populate the recurring GP vs cost section.</div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Recurring GP contributor schedule</h3>
+              <p class="section-subtitle">Which customers and opportunities lift the monthly recurring GP runway.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Customer</th>
+                    <th>Description</th>
+                    <th>Stage</th>
+                    <th>Salesperson</th>
+                    <th>Monthly Recurring GP</th>
+                  </tr>
+                </thead>
+                <tbody id="execRecurringContributorsBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Closed won by service type</h3>
+              <p class="section-subtitle">Closed won performance split by service type with recurring and non-recurring contribution.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Service Type</th>
+                    <th>Deals</th>
+                    <th>Recurring Revenue</th>
+                    <th>Recurring GP</th>
+                    <th>Non-Recurring Revenue</th>
+                    <th>Non-Recurring GP</th>
+                    <th>Total Revenue</th>
+                    <th>Total GP</th>
+                  </tr>
+                </thead>
+                <tbody id="execClosedServiceBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Pipeline by stage and forecast month</h3>
+              <p class="section-subtitle">Monthly pipeline totals grouped for cleaner board reporting rather than listing each individual deal.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Forecast Month</th>
+                    <th>Stage</th>
+                    <th>Customers</th>
+                    <th>Avg Open Days</th>
+                    <th>Recurring Revenue</th>
+                    <th>Recurring GP</th>
+                    <th>Non-Recurring Revenue</th>
+                    <th>Non-Recurring GP</th>
+                    <th>Total Revenue</th>
+                    <th>Total GP</th>
+                  </tr>
+                </thead>
+                <tbody id="execPipelineBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Pipeline added by salesperson and month</h3>
+              <p class="section-subtitle">Productivity view showing how many opportunities each salesperson has added to pipeline in the selected period.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Salesperson</th>
+                    <th>Added Month</th>
+                    <th>Opportunities Added</th>
+                    <th>Recurring Deals</th>
+                    <th>Non-Recurring Deals</th>
+                  </tr>
+                </thead>
+                <tbody id="execProductivityBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="salesReport" class="report">
+          <div class="report-header">
+            <div>
+              <h2>Salesperson performance report</h2>
+              <p>Personal performance scorecard with closed won GP, commission tracking, target attainment and live pipeline forecast visuals.</p>
+            </div>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card"><div class="kpi-label">Closed Won Deals</div><div id="salesClosedDeals" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Open Pipeline Opportunities</div><div id="salesPipelineDeals" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Recurring Revenue</div><div id="salesRecurringRevenue" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Recurring GP</div><div id="salesRecurringGp" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Recurring Commission Earned</div><div id="salesRecurringCommissionEarned" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Non-Recurring Revenue</div><div id="salesNonRecurringRevenue" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Non-Recurring GP</div><div id="salesNonRecurringGp" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Non-Recurring Commission Earned</div><div id="salesNonRecurringCommissionEarned" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Total Commission Earned</div><div id="salesCommissionEarned" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Possible Pipeline Commission</div><div id="salesPossibleCommission" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Weighted Pipeline Commission</div><div id="salesWeightedCommission" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Opportunities Added</div><div id="salesOppsAdded" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Average Open Days</div><div id="salesAvgOpenDays" class="kpi-value">-</div></div>
+            <div class="kpi-card"><div class="kpi-label">Average Days to Close</div><div id="salesAvgDaysToClose" class="kpi-value">-</div></div>
+          </div>
+
+          <div class="chart-grid">
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">Target vs actual</h3>
+                <p class="section-subtitle">Shows current attainment across monthly, quarterly and managed recurring GP targets.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="salesTargetChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">Commission mix</h3>
+                <p class="section-subtitle">Earned commission split compared with weighted pipeline commission still available.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="salesCommissionChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">Pipeline GP by forecast month</h3>
+                <p class="section-subtitle">Open pipeline GP grouped by month and split by recurring and non-recurring deals.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="salesPipelineMonthChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="card-head">
+                <h3 class="section-title">Closed GP by service type</h3>
+                <p class="section-subtitle">Which service lines are driving the strongest closed won gross profit.</p>
+              </div>
+              <div class="chart-wrap"><canvas id="salesServiceChart"></canvas></div>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Sales target tracker</h3>
+              <p class="section-subtitle">Tracks target, actual, gap and attainment against the current salesperson profile.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Target</th>
+                    <th>Target Value</th>
+                    <th>Actual</th>
+                    <th>Gap / Surplus</th>
+                    <th>Attainment</th>
+                  </tr>
+                </thead>
+                <tbody id="salesTargetBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Closed won by service type</h3>
+              <p class="section-subtitle">Closed won values by service type for the selected salesperson and period.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Service Type</th>
+                    <th>Deals</th>
+                    <th>Recurring Revenue</th>
+                    <th>Recurring GP</th>
+                    <th>Non-Recurring Revenue</th>
+                    <th>Non-Recurring GP</th>
+                    <th>Total Revenue</th>
+                    <th>Total GP</th>
+                  </tr>
+                </thead>
+                <tbody id="salesClosedServiceBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Open pipeline and possible commission</h3>
+              <p class="section-subtitle">Grouped live pipeline totals with forecast month, customer names and commission potential.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Stage</th>
+                    <th>Forecast Month</th>
+                    <th>Customers</th>
+                    <th>Deals</th>
+                    <th>Avg Open Days</th>
+                    <th>Recurring Revenue</th>
+                    <th>Recurring GP</th>
+                    <th>Non-Recurring Revenue</th>
+                    <th>Non-Recurring GP</th>
+                    <th>Total GP</th>
+                    <th>Possible Commission</th>
+                    <th>Weighted Commission</th>
+                  </tr>
+                </thead>
+                <tbody id="salesPipelineBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="card-head">
+              <h3 class="section-title">Pipeline added by month</h3>
+              <p class="section-subtitle">Productivity trend for new opportunities added into the pipeline.</p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Added Month</th>
+                    <th>Opportunities Added</th>
+                    <th>Recurring Deals</th>
+                    <th>Non-Recurring Deals</th>
+                  </tr>
+                </thead>
+                <tbody id="salesProductivityBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const COMMISSION_RATE = 0.25;
+    const SENIOR_PASSWORD = "IamAseniorLeader!%!";
+    const SALES_TARGETS = {
+      monthlyRecurringGp: 1000,
+      monthlyNonRecurringGp: 7500,
+      quarterlyRecurringGp: 3000,
+      quarterlyNonRecurringGp: 22500,
+      recurringBase12Month: 12000,
+      recurringBase24Month: 24000
+    };
+
+    const COLORS = {
+      recurring: "#22c55e",
+      recurringSoft: "#86efac",
+      nonRecurring: "#06b6d4",
+      nonRecurringSoft: "#67e8f9",
+      pipeline: "#f59e0b",
+      weighted: "#8b5cf6",
+      cost: "#ef4444",
+      total: "#1d4ed8",
+      slate: "#94a3b8",
+      stage: ["#0ea5e9", "#38bdf8", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#64748b"]
+    };
+
+    const homeScreen = document.getElementById("homeScreen");
+    const appScreen = document.getElementById("appScreen");
+    const seniorLeaderBtn = document.getElementById("seniorLeaderBtn");
+    const salesPersonBtn = document.getElementById("salesPersonBtn");
+    const leaderPasswordBox = document.getElementById("leaderPasswordBox");
+    const leaderPasswordInput = document.getElementById("leaderPasswordInput");
+    const leaderPasswordBtn = document.getElementById("leaderPasswordBtn");
+    const leaderPasswordStatus = document.getElementById("leaderPasswordStatus");
+    const homeBtn = document.getElementById("homeBtn");
+    const modeBadge = document.getElementById("modeBadge");
+    const fileInput = document.getElementById("fileInput");
+    const businessPlanInput = document.getElementById("businessPlanInput");
+    const yearFilter = document.getElementById("yearFilter");
+    const salespersonFilter = document.getElementById("salespersonFilter");
+    const salespersonGroup = document.getElementById("salespersonGroup");
+    const statusEl = document.getElementById("status");
+    const execReport = document.getElementById("execReport");
+    const salesReport = document.getElementById("salesReport");
+    const execCostCoverageEmpty = document.getElementById("execCostCoverageEmpty");
+
+    let workbookRows = [];
+    let stageProbabilities = {};
+    let businessPlanCosts = null;
+    let currentRole = null;
+    const chartRegistry = {};
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const stageOrder = {
+      "pipeline": 1,
+      "lead": 2,
+      "to be contacted": 3,
+      "qualified": 4,
+      "quoting": 5,
+      "negotiating": 6
+    };
+    const defaultStageProbabilities = {
+      "lead": 0.10,
+      "to be contacted": 0.15,
+      "qualified": 0.30,
+      "quoting": 0.60,
+      "negotiating": 0.80
+    };
+
+    if (typeof Chart !== "undefined") {
+      Chart.defaults.font.family = "\"Segoe UI\", Tahoma, Arial, sans-serif";
+      Chart.defaults.color = "#324a72";
+      Chart.defaults.borderColor = "rgba(15, 29, 52, 0.08)";
+    }
+
+    fileInput.addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      try {
+        status("Loading Sales Tracker workbook...");
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
+        stageProbabilities = readStageProbabilities(workbook);
+        workbookRows = readSalesTracker(workbook);
+        if (!workbookRows.length) {
+          throw new Error("No valid rows were found in the Sales Tracker sheet.");
+        }
+        fillPeriodFilter();
+        fillSalespersonFilter(workbookRows);
+        renderCurrentReport();
+        status(`Loaded ${workbookRows.length} sales tracker rows from ${file.name}.`);
+      } catch (error) {
+        status(`Could not load workbook: ${error.message}`);
+      }
+    });
+
+    businessPlanInput.addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      try {
+        status("Loading board business plan...");
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
+        businessPlanCosts = readBusinessPlanCosts(workbook);
+        if (!businessPlanCosts || !Object.keys(businessPlanCosts).length) {
+          throw new Error("Could not find monthly Total Cost values in the business plan.");
+        }
+        if (workbookRows.length && currentRole) {
+          renderCurrentReport();
+        }
+        status(`Loaded board business plan from ${file.name}.`);
+      } catch (error) {
+        status(`Could not load board business plan: ${error.message}`);
+      }
+    });
+
+    yearFilter.addEventListener("change", renderCurrentReport);
+    salespersonFilter.addEventListener("change", renderCurrentReport);
+    seniorLeaderBtn.addEventListener("click", () => {
+      leaderPasswordBox.classList.remove("hidden");
+      leaderPasswordStatus.textContent = "";
+      leaderPasswordInput.focus();
+    });
+    leaderPasswordBtn.addEventListener("click", unlockSeniorLeader);
+    leaderPasswordInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") unlockSeniorLeader();
+    });
+    salesPersonBtn.addEventListener("click", () => enterRole("sales"));
+    homeBtn.addEventListener("click", showHome);
+
+    function status(text) {
+      statusEl.textContent = text;
+    }
+
+    function normaliseKey(value) {
+      return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    }
+
+    function compactKey(value) {
+      return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
+    }
+
+    function parseCurrency(value) {
+      if (value === null || value === undefined || value === "") return 0;
+      if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+      const cleaned = String(value).replace(/[£$,]/g, "").replace(/\s+/g, "");
+      if (!cleaned) return 0;
+      const negative = cleaned.startsWith("(") && cleaned.endsWith(")");
+      const raw = cleaned.replace(/[()]/g, "");
+      const number = Number(raw);
+      if (!Number.isFinite(number)) return 0;
+      return negative ? -number : number;
+    }
+
+    function excelDateToJs(serial) {
+      const utcDays = Math.floor(serial - 25569);
+      const utcValue = utcDays * 86400;
+      return new Date(utcValue * 1000);
+    }
+
+    function parseDate(value) {
+      if (!value) return null;
+      if (value instanceof Date && !isNaN(value.valueOf())) return value;
+      if (typeof value === "number") return excelDateToJs(value);
+      const parsed = new Date(String(value));
+      if (!isNaN(parsed.valueOf())) return parsed;
+      return null;
+    }
+
+    function parseMonth(value, fallbackDate) {
+      if (value instanceof Date && !isNaN(value.valueOf())) {
+        return { year: value.getFullYear(), month: value.getMonth() + 1 };
+      }
+
+      if (typeof value === "string") {
+        const text = value.trim();
+        const match = text.match(/^([A-Za-z]+)\s+(\d{4})$/);
+        if (match) {
+          const monthIndex = monthNames.findIndex(item => item.toLowerCase() === match[1].slice(0, 3).toLowerCase());
+          if (monthIndex >= 0) {
+            return { year: Number(match[2]), month: monthIndex + 1 };
+          }
+        }
+        const parsed = parseDate(text);
+        if (parsed) return { year: parsed.getFullYear(), month: parsed.getMonth() + 1 };
+      }
+
+      if (typeof value === "number") {
+        const parsed = parseDate(value);
+        if (parsed) return { year: parsed.getFullYear(), month: parsed.getMonth() + 1 };
+      }
+
+      if (fallbackDate instanceof Date && !isNaN(fallbackDate.valueOf())) {
+        return { year: fallbackDate.getFullYear(), month: fallbackDate.getMonth() + 1 };
+      }
+
+      return null;
+    }
+
+    function readSheetRows(sheet) {
+      return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    }
+
+    function readStageProbabilities(workbook) {
+      const probabilities = { ...defaultStageProbabilities };
+      const sheetName = workbook.SheetNames.find(name => normaliseKey(name) === "weighted pipeline");
+      if (!sheetName) return probabilities;
+
+      const rows = readSheetRows(workbook.Sheets[sheetName]);
+      for (let i = 0; i < rows.length; i++) {
+        const stage = String(rows[i][0] || "").trim();
+        const probability = rows[i][1];
+        const stageKey = normaliseKey(stage);
+        if (!stageKey || stageKey === "stage") continue;
+
+        let value = 0;
+        if (typeof probability === "number") {
+          value = probability > 1 ? probability / 100 : probability;
+        } else if (typeof probability === "string") {
+          const parsed = Number(probability.replace("%", "").trim());
+          value = Number.isFinite(parsed) ? (parsed > 1 ? parsed / 100 : parsed) : 0;
+        }
+
+        if (value >= 0 && value <= 1) {
+          probabilities[stageKey] = value;
+        }
+      }
+
+      return probabilities;
+    }
+
+    function readSalesTracker(workbook) {
+      const sheetName = workbook.SheetNames.find(name => normaliseKey(name) === "sales tracker");
+      if (!sheetName) throw new Error("Sheet 'Sales Tracker' was not found.");
+
+      const rows = readSheetRows(workbook.Sheets[sheetName]);
+      const headerIndex = rows.findIndex(row => row.some(cell => normaliseKey(cell) === "opportunity id"));
+      if (headerIndex < 0) throw new Error("Could not find the Sales Tracker header row.");
+
+      const headers = rows[headerIndex];
+      const columns = {};
+      headers.forEach((header, index) => {
+        columns[normaliseKey(header)] = index;
+      });
+
+      const required = {
+        opportunityId: columns["opportunity id"],
+        customer: columns["customer"],
+        stage: columns["stage"],
+        dateAddedToPipeline: columns["date added to pipeline"],
+        predictedSalesMonth: columns["predicted sales month"],
+        predictedBillingStartDate: columns["predicted billing start date"],
+        dealType: columns["deal type"],
+        description: columns["description"],
+        serviceType: columns["service type"],
+        salesOwner: columns["sales owner"],
+        revenue: columns["revenue"],
+        profit: columns["profit"],
+        pipelineRevenue: columns["pipeline revenue"],
+        pipelineProfit: columns["pipeline profit"],
+        closedRevenue: columns["closed revenue"],
+        closedProfit: columns["closed profit"]
+      };
+
+      if (required.opportunityId === undefined || required.stage === undefined) {
+        throw new Error("Opportunity ID or Stage column is missing from Sales Tracker.");
+      }
+
+      const data = [];
+      for (let i = headerIndex + 1; i < rows.length; i++) {
+        const row = rows[i];
+        const opportunityId = String(row[required.opportunityId] || "").trim();
+        if (!opportunityId) continue;
+
+        const billingDate = parseDate(row[required.predictedBillingStartDate]);
+        const period = parseMonth(row[required.predictedSalesMonth], billingDate);
+        if (!period) continue;
+
+        const dateAddedToPipeline = parseDate(row[required.dateAddedToPipeline]);
+        const stage = String(row[required.stage] || "").trim();
+        const customer = String(row[required.customer] || "").trim() || "Unspecified";
+        const description = String(row[required.description] || "").trim();
+        const salesOwner = String(row[required.salesOwner] || "").trim();
+        const serviceType = String(row[required.serviceType] || "").trim() || "Unspecified";
+        const dealType = String(row[required.dealType] || "").trim() || "Unspecified";
+
+        data.push({
+          opportunityId,
+          year: period.year,
+          month: period.month,
+          monthLabel: `${monthNames[period.month - 1]} ${period.year}`,
+          reportDate: new Date(period.year, period.month - 1, 1),
+          billingDate,
+          dateAddedToPipeline,
+          dateAddedMonthLabel: dateAddedToPipeline ? `${monthNames[dateAddedToPipeline.getMonth()]} ${dateAddedToPipeline.getFullYear()}` : "",
+          customer,
+          description,
+          stage,
+          stageKey: normaliseKey(stage),
+          salesOwner,
+          serviceType,
+          serviceTypeKey: normaliseKey(serviceType),
+          dealType,
+          dealTypeKey: normaliseKey(dealType),
+          revenue: parseCurrency(row[required.revenue]),
+          profit: parseCurrency(row[required.profit]),
+          pipelineRevenue: parseCurrency(row[required.pipelineRevenue]),
+          pipelineProfit: parseCurrency(row[required.pipelineProfit]),
+          closedRevenue: parseCurrency(row[required.closedRevenue]),
+          closedProfit: parseCurrency(row[required.closedProfit])
+        });
+      }
+
+      return data;
+    }
+
+    function readBusinessPlanCosts(workbook) {
+      for (const sheetName of workbook.SheetNames) {
+        const rows = readSheetRows(workbook.Sheets[sheetName]);
+        const metricRowIndex = rows.findIndex(row => normaliseKey(row[0]) === "metric");
+        if (metricRowIndex < 0) continue;
+
+        const costRowIndex = rows.findIndex(row => normaliseKey(row[0]) === "total cost");
+        if (costRowIndex < 0) continue;
+
+        const headerRow = rows[metricRowIndex];
+        const costRow = rows[costRowIndex];
+        const costs = {};
+
+        for (let c = 1; c < headerRow.length; c++) {
+          const headerDate = parseDate(headerRow[c]);
+          if (!headerDate) continue;
+          const key = monthKey(headerDate.getFullYear(), headerDate.getMonth() + 1);
+          const value = parseCurrency(costRow[c]);
+          if (value || value === 0) {
+            costs[key] = value;
+          }
+        }
+
+        if (Object.keys(costs).length) {
+          return costs;
+        }
+      }
+
+      return null;
+    }
+
+    function isClosedWon(stageKey) {
+      const compact = compactKey(stageKey);
+      return compact.includes("closed") && compact.includes("won");
+    }
+
+    function isClosedLost(stageKey) {
+      const compact = compactKey(stageKey);
+      return compact.includes("closed") && compact.includes("lost");
+    }
+
+    function isOpenStage(stageKey) {
+      return !isClosedWon(stageKey) && !isClosedLost(stageKey);
+    }
+
+    function classifyDealType(dealTypeKey) {
+      const compact = compactKey(dealTypeKey);
+      if (compact.includes("nonrecurring")) return "nonRecurring";
+      if (compact.includes("recurring")) return "recurring";
+      return "unknown";
+    }
+
+    function stageProbability(stageKey) {
+      return stageProbabilities[stageKey] ?? 0;
+    }
+
+    function closedRevenue(row) {
+      return row.closedRevenue || row.revenue;
+    }
+
+    function closedGp(row) {
+      return row.closedProfit || row.profit;
+    }
+
+    function openRevenue(row) {
+      return row.pipelineRevenue || row.revenue;
+    }
+
+    function openGp(row) {
+      return row.pipelineProfit || row.profit;
+    }
+
+    function monthKey(year, month) {
+      return `${year}-${String(month).padStart(2, "0")}`;
+    }
+
+    function monthLabelFromParts(year, month) {
+      return `${monthNames[month - 1]} ${year}`;
+    }
+
+    function daysBetween(startDate, endDate) {
+      if (!(startDate instanceof Date) || isNaN(startDate.valueOf())) return null;
+      if (!(endDate instanceof Date) || isNaN(endDate.valueOf())) return null;
+      const ms = endDate.getTime() - startDate.getTime();
+      return ms >= 0 ? Math.round(ms / 86400000) : null;
+    }
+
+    function averageDays(values) {
+      const valid = values.filter(value => Number.isFinite(value));
+      if (!valid.length) return null;
+      return Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
+    }
+
+    function formatDays(value) {
+      return Number.isFinite(value) ? `${value} days` : "-";
+    }
+
+    function fillPeriodFilter() {
+      const today = new Date();
+      const options = [
+        { value: "this-month", label: `This month (${monthNames[today.getMonth()]} ${today.getFullYear()})` },
+        { value: "this-quarter", label: `This quarter (${quarterLabelFromDate(today)})` },
+        { value: "current-fy", label: `Current FY (${fiscalYearLabel(today)})` },
+        { value: "calendar-2026", label: "Calendar 2026" },
+        { value: "calendar-2027", label: "Calendar 2027" }
+      ];
+      yearFilter.innerHTML = "";
+      options.forEach(optionData => {
+        const option = document.createElement("option");
+        option.value = optionData.value;
+        option.textContent = optionData.label;
+        yearFilter.appendChild(option);
+      });
+      yearFilter.value = "this-month";
+    }
+
+    function fillSalespersonFilter(rows) {
+      const owners = [...new Set(rows.map(row => row.salesOwner).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      salespersonFilter.innerHTML = "";
+      owners.forEach(owner => {
+        const option = document.createElement("option");
+        option.value = owner;
+        option.textContent = owner;
+        salespersonFilter.appendChild(option);
+      });
+      if (owners.length) {
+        salespersonFilter.value = owners[0];
+      }
+    }
+
+    function syncVisibleReport() {
+      const salesMode = currentRole === "sales";
+      execReport.classList.toggle("active", !salesMode);
+      salesReport.classList.toggle("active", salesMode);
+      salespersonGroup.classList.toggle("hidden", !salesMode);
+      modeBadge.textContent = salesMode ? "Salesperson mode" : "Senior leader mode";
+    }
+
+    function renderCurrentReport() {
+      if (!currentRole || !workbookRows.length) return;
+      syncVisibleReport();
+      const periodKey = yearFilter.value;
+      if (currentRole === "sales") {
+        renderSalesReport(periodKey, salespersonFilter.value);
+      } else {
+        renderExecReport(periodKey);
+      }
+    }
+
+    function unlockSeniorLeader() {
+      if (leaderPasswordInput.value === SENIOR_PASSWORD) {
+        leaderPasswordStatus.textContent = "";
+        leaderPasswordInput.value = "";
+        enterRole("exec");
+        return;
+      }
+      leaderPasswordStatus.textContent = "Incorrect password.";
+    }
+
+    function enterRole(role) {
+      currentRole = role;
+      homeScreen.classList.remove("active");
+      appScreen.classList.add("active");
+      syncVisibleReport();
+      if (workbookRows.length) {
+        renderCurrentReport();
+      } else {
+        status(`Choose your workbook to load the ${role === "sales" ? "salesperson" : "senior exec"} report.`);
+      }
+    }
+
+    function showHome() {
+      currentRole = null;
+      appScreen.classList.remove("active");
+      homeScreen.classList.add("active");
+      leaderPasswordBox.classList.add("hidden");
+      leaderPasswordStatus.textContent = "";
+      leaderPasswordInput.value = "";
+    }
+
+    function rowsForPeriod(periodKey) {
+      return workbookRows.filter(row => rowMatchesPeriod(row, periodKey));
+    }
+
+    function rowMatchesPeriod(row, periodKey) {
+      const rowDate = row.reportDate || new Date(row.year, row.month - 1, 1);
+      const now = new Date();
+
+      if (periodKey === "this-month") {
+        return row.year === now.getFullYear() && row.month === now.getMonth() + 1;
+      }
+
+      if (periodKey === "this-quarter") {
+        return row.year === now.getFullYear() && quarterNumber(row.month) === quarterNumber(now.getMonth() + 1);
+      }
+
+      if (periodKey === "current-fy") {
+        return fiscalYearStart(rowDate).getTime() === fiscalYearStart(now).getTime();
+      }
+
+      if (periodKey === "calendar-2026") return row.year === 2026;
+      if (periodKey === "calendar-2027") return row.year === 2027;
+
+      return true;
+    }
+
+    function dateMatchesPeriod(dateValue, periodKey) {
+      if (!(dateValue instanceof Date) || isNaN(dateValue.valueOf())) return false;
+      const tempRow = {
+        year: dateValue.getFullYear(),
+        month: dateValue.getMonth() + 1,
+        reportDate: new Date(dateValue.getFullYear(), dateValue.getMonth(), 1)
+      };
+      return rowMatchesPeriod(tempRow, periodKey);
+    }
+
+    function quarterNumber(month) {
+      return Math.floor((month - 1) / 3) + 1;
+    }
+
+    function quarterLabelFromDate(date) {
+      return `Q${quarterNumber(date.getMonth() + 1)} ${date.getFullYear()}`;
+    }
+
+    function fiscalYearStart(date) {
+      const year = date.getMonth() >= 10 ? date.getFullYear() : date.getFullYear() - 1;
+      return new Date(year, 10, 1);
+    }
+
+    function fiscalYearLabel(date) {
+      const start = fiscalYearStart(date).getFullYear();
+      return `${start}/${String((start + 1) % 100).padStart(2, "0")} (Nov-Oct)`;
+    }
+
+    function periodLabel(periodKey) {
+      const option = [...yearFilter.options].find(item => item.value === periodKey);
+      return option ? option.textContent : periodKey;
+    }
+
+    function pctOfTarget(actual, target) {
+      if (!target) return "-";
+      return `${((actual / target) * 100).toFixed(0)}%`;
+    }
+
+    function summariseClosed(rows) {
+      const summary = {
+        deals: 0,
+        totalRevenue: 0,
+        totalGp: 0,
+        recurringRevenue: 0,
+        recurringGp: 0,
+        nonRecurringRevenue: 0,
+        nonRecurringGp: 0,
+        recurringCommissionEarned: 0,
+        nonRecurringCommissionEarned: 0,
+        avgDaysToClose: null
+      };
+      const closeDays = [];
+
+      rows.forEach(row => {
+        summary.deals += 1;
+        const revenue = closedRevenue(row);
+        const gp = closedGp(row);
+        const kind = classifyDealType(row.dealTypeKey);
+
+        summary.totalRevenue += revenue;
+        summary.totalGp += gp;
+
+        if (kind === "recurring") {
+          summary.recurringRevenue += revenue;
+          summary.recurringGp += gp;
+          summary.recurringCommissionEarned += gp * COMMISSION_RATE;
+        } else if (kind === "nonRecurring") {
+          summary.nonRecurringRevenue += revenue;
+          summary.nonRecurringGp += gp;
+          summary.nonRecurringCommissionEarned += gp * COMMISSION_RATE;
+        }
+
+        const daysToClose = daysBetween(row.dateAddedToPipeline, row.reportDate);
+        if (Number.isFinite(daysToClose)) closeDays.push(daysToClose);
+      });
+
+      summary.avgDaysToClose = averageDays(closeDays);
+      return summary;
+    }
+
+    function summariseOpen(rows) {
+      const summary = {
+        totalRevenue: 0,
+        totalGp: 0,
+        possibleCommission: 0,
+        weightedCommission: 0,
+        avgOpenDays: null
+      };
+      const openDays = [];
+
+      rows.forEach(row => {
+        const revenue = openRevenue(row);
+        const gp = openGp(row);
+        const probability = stageProbability(row.stageKey);
+
+        summary.totalRevenue += revenue;
+        summary.totalGp += gp;
+        summary.possibleCommission += gp * COMMISSION_RATE;
+        summary.weightedCommission += gp * probability * COMMISSION_RATE;
+
+        const ageDays = daysBetween(row.dateAddedToPipeline, new Date());
+        if (Number.isFinite(ageDays)) openDays.push(ageDays);
+      });
+
+      summary.avgOpenDays = averageDays(openDays);
+      return summary;
+    }
+
+    function summariseProductivity(rows, periodKey) {
+      const addedRows = rows.filter(row => dateMatchesPeriod(row.dateAddedToPipeline, periodKey));
+      return {
+        addedCount: addedRows.length,
+        rows: addedRows
+      };
+    }
+
+    function buildSalesTargetsSummary(rows) {
+      const closedRows = rows.filter(row => isClosedWon(row.stageKey));
+      const currentMonthClosed = closedRows.filter(row => rowMatchesPeriod(row, "this-month"));
+      const currentQuarterClosed = closedRows.filter(row => rowMatchesPeriod(row, "this-quarter"));
+
+      const monthlyRecurringActual = currentMonthClosed
+        .filter(row => classifyDealType(row.dealTypeKey) === "recurring")
+        .reduce((sum, row) => sum + closedGp(row), 0);
+      const monthlyNonRecurringActual = currentMonthClosed
+        .filter(row => classifyDealType(row.dealTypeKey) === "nonRecurring")
+        .reduce((sum, row) => sum + closedGp(row), 0);
+
+      const quarterlyRecurringActual = currentQuarterClosed
+        .filter(row => classifyDealType(row.dealTypeKey) === "recurring")
+        .reduce((sum, row) => sum + closedGp(row), 0);
+      const quarterlyNonRecurringActual = currentQuarterClosed
+        .filter(row => classifyDealType(row.dealTypeKey) === "nonRecurring")
+        .reduce((sum, row) => sum + closedGp(row), 0);
+
+      const currentRecurringBaseActual = closedRows
+        .filter(row => classifyDealType(row.dealTypeKey) === "recurring")
+        .reduce((sum, row) => sum + closedGp(row), 0);
+
+      return [
+        { name: "Monthly recurring GP", target: SALES_TARGETS.monthlyRecurringGp, actual: monthlyRecurringActual },
+        { name: "Monthly non-recurring GP", target: SALES_TARGETS.monthlyNonRecurringGp, actual: monthlyNonRecurringActual },
+        { name: "Quarterly recurring GP", target: SALES_TARGETS.quarterlyRecurringGp, actual: quarterlyRecurringActual },
+        { name: "Quarterly non-recurring GP", target: SALES_TARGETS.quarterlyNonRecurringGp, actual: quarterlyNonRecurringActual },
+        { name: "Managed recurring GP base (12-month target)", target: SALES_TARGETS.recurringBase12Month, actual: currentRecurringBaseActual },
+        { name: "Managed recurring GP base (24-month target)", target: SALES_TARGETS.recurringBase24Month, actual: currentRecurringBaseActual }
+      ].map(item => ({
+        ...item,
+        gap: item.actual - item.target,
+        attainment: pctOfTarget(item.actual, item.target)
+      }));
+    }
+
+    function groupClosedByServiceType(rows) {
+      const map = new Map();
+
+      rows.forEach(row => {
+        const key = row.serviceType || "Unspecified";
+        if (!map.has(key)) {
+          map.set(key, {
+            serviceType: key,
+            deals: 0,
+            recurringRevenue: 0,
+            recurringGp: 0,
+            nonRecurringRevenue: 0,
+            nonRecurringGp: 0,
+            totalRevenue: 0,
+            totalGp: 0
+          });
+        }
+
+        const item = map.get(key);
+        const revenue = closedRevenue(row);
+        const gp = closedGp(row);
+        const kind = classifyDealType(row.dealTypeKey);
+
+        item.deals += 1;
+        item.totalRevenue += revenue;
+        item.totalGp += gp;
+
+        if (kind === "recurring") {
+          item.recurringRevenue += revenue;
+          item.recurringGp += gp;
+        } else if (kind === "nonRecurring") {
+          item.nonRecurringRevenue += revenue;
+          item.nonRecurringGp += gp;
+        }
+      });
+
+      return [...map.values()].sort((a, b) => b.totalGp - a.totalGp);
+    }
+
+    function groupOpenByStageAndMonth(rows) {
+      const map = new Map();
+
+      rows.forEach(row => {
+        const stageBucket = normalisePipelineStage(row.stageKey, row.stage);
+        const key = `${stageBucket.stageKey}|${row.year}|${row.month}`;
+        if (!map.has(key)) {
+          map.set(key, {
+            stage: stageBucket.label,
+            stageKey: stageBucket.stageKey,
+            month: row.month,
+            year: row.year,
+            monthLabel: row.monthLabel,
+            customers: new Set(),
+            deals: 0,
+            openDays: [],
+            recurringRevenue: 0,
+            recurringGp: 0,
+            nonRecurringRevenue: 0,
+            nonRecurringGp: 0,
+            totalRevenue: 0,
+            totalGp: 0,
+            possibleCommission: 0,
+            weightedCommission: 0
+          });
+        }
+
+        const item = map.get(key);
+        const revenue = openRevenue(row);
+        const gp = openGp(row);
+        const kind = classifyDealType(row.dealTypeKey);
+        const probability = stageProbability(row.stageKey);
+
+        item.customers.add(row.customer || "Unspecified");
+        item.deals += 1;
+        item.totalRevenue += revenue;
+        item.totalGp += gp;
+        item.possibleCommission += gp * COMMISSION_RATE;
+        item.weightedCommission += gp * probability * COMMISSION_RATE;
+        const ageDays = daysBetween(row.dateAddedToPipeline, new Date());
+        if (Number.isFinite(ageDays)) item.openDays.push(ageDays);
+
+        if (kind === "recurring") {
+          item.recurringRevenue += revenue;
+          item.recurringGp += gp;
+        } else if (kind === "nonRecurring") {
+          item.nonRecurringRevenue += revenue;
+          item.nonRecurringGp += gp;
+        }
+      });
+
+      return [...map.values()].map(item => ({
+        ...item,
+        customerList: [...item.customers].sort((a, b) => a.localeCompare(b)).join(" / "),
+        avgOpenDays: averageDays(item.openDays)
+      })).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        if (a.month !== b.month) return a.month - b.month;
+        return (stageOrder[a.stageKey] ?? 99) - (stageOrder[b.stageKey] ?? 99);
+      });
+    }
+
+    function groupAddedToPipelineByMonth(rows, periodKey, includeSalesOwner) {
+      const map = new Map();
+
+      rows.filter(row => dateMatchesPeriod(row.dateAddedToPipeline, periodKey)).forEach(row => {
+        const key = includeSalesOwner
+          ? `${row.salesOwner}|${row.dateAddedMonthLabel}`
+          : row.dateAddedMonthLabel;
+
+        if (!map.has(key)) {
+          map.set(key, {
+            salesOwner: row.salesOwner,
+            addedMonth: row.dateAddedMonthLabel,
+            opportunitiesAdded: 0,
+            recurringDeals: 0,
+            nonRecurringDeals: 0,
+            sortDate: new Date(row.dateAddedToPipeline.getFullYear(), row.dateAddedToPipeline.getMonth(), 1)
+          });
+        }
+
+        const item = map.get(key);
+        item.opportunitiesAdded += 1;
+        const kind = classifyDealType(row.dealTypeKey);
+        if (kind === "recurring") item.recurringDeals += 1;
+        if (kind === "nonRecurring") item.nonRecurringDeals += 1;
+      });
+
+      return [...map.values()].sort((a, b) => {
+        if (includeSalesOwner) {
+          const ownerDiff = a.salesOwner.localeCompare(b.salesOwner);
+          if (ownerDiff !== 0) return ownerDiff;
+        }
+        return a.sortDate - b.sortDate;
+      });
+    }
+
+    function buildMonthRange(startYear, startMonth, endYear, endMonth) {
+      const months = [];
+      let year = startYear;
+      let month = startMonth;
+      while (year < endYear || (year === endYear && month <= endMonth)) {
+        months.push({ year, month, key: monthKey(year, month), label: monthLabelFromParts(year, month) });
+        month += 1;
+        if (month > 12) {
+          month = 1;
+          year += 1;
+        }
+      }
+      return months;
+    }
+
+    function getMonthlyCostForKey(key, fallbackCost) {
+      if (businessPlanCosts && Object.prototype.hasOwnProperty.call(businessPlanCosts, key)) {
+        return businessPlanCosts[key];
+      }
+      return fallbackCost;
+    }
+
+    function buildRecurringCostCoverage() {
+      if (!businessPlanCosts) return null;
+
+      const months = buildMonthRange(2026, 1, 2027, 12);
+      const knownKeys = Object.keys(businessPlanCosts).sort();
+      const fallbackCost = knownKeys.length ? businessPlanCosts[knownKeys[knownKeys.length - 1]] : 0;
+
+      const monthlyRecurringGp = {};
+      const monthlyContributors = {};
+      workbookRows.forEach(row => {
+        if (classifyDealType(row.dealTypeKey) !== "recurring") return;
+        if (isClosedLost(row.stageKey)) return;
+        const billingDate = row.billingDate || row.reportDate;
+        if (!(billingDate instanceof Date) || isNaN(billingDate.valueOf())) return;
+        const startYear = billingDate.getFullYear();
+        const startMonth = billingDate.getMonth() + 1;
+        const monthlyGp = row.profit || row.closedProfit || row.pipelineProfit || 0;
+        if (!monthlyGp) return;
+        const contributorLabel = row.description ? `${row.customer} - ${row.description}` : row.customer;
+
+        months.forEach(item => {
+          if (item.year < startYear || (item.year === startYear && item.month < startMonth)) return;
+          monthlyRecurringGp[item.key] = (monthlyRecurringGp[item.key] || 0) + monthlyGp;
+          if (!monthlyContributors[item.key]) monthlyContributors[item.key] = new Set();
+          monthlyContributors[item.key].add(contributorLabel);
+        });
+      });
+
+      const rows = months.map(item => {
+        const recurringGp = monthlyRecurringGp[item.key] || 0;
+        const cost = getMonthlyCostForKey(item.key, fallbackCost);
+        const gap = recurringGp - cost;
+        return {
+          monthLabel: item.label,
+          recurringGp,
+          monthlyCost: cost,
+          gap,
+          covered: gap >= 0,
+          contributorCount: monthlyContributors[item.key] ? monthlyContributors[item.key].size : 0
+        };
+      });
+
+      const firstCovered = rows.find(item => item.covered);
+      return {
+        firstCoveredMonth: firstCovered ? firstCovered.monthLabel : null,
+        rows
+      };
+    }
+
+    function buildRecurringContributorRows() {
+      return workbookRows
+        .filter(row => classifyDealType(row.dealTypeKey) === "recurring")
+        .filter(row => !isClosedLost(row.stageKey))
+        .map(row => {
+          const billingDate = row.billingDate || row.reportDate;
+          if (!(billingDate instanceof Date) || isNaN(billingDate.valueOf())) return null;
+          return {
+            year: billingDate.getFullYear(),
+            month: billingDate.getMonth() + 1,
+            monthLabel: monthLabelFromParts(billingDate.getFullYear(), billingDate.getMonth() + 1),
+            customer: row.customer || "Unspecified",
+            description: row.description || "-",
+            stage: row.stage || "Unknown",
+            salesOwner: row.salesOwner || "",
+            recurringGp: row.profit || row.closedProfit || row.pipelineProfit || 0
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          if (a.month !== b.month) return a.month - b.month;
+          return a.customer.localeCompare(b.customer);
+        });
+    }
+
+    function normalisePipelineStage(stageKey, stageLabel) {
+      const compact = compactKey(stageKey);
+      if (compact === "tobecontacted" || compact === "lead") {
+        return { stageKey: "lead", label: "Lead" };
+      }
+      if (compact.includes("qualified")) {
+        return { stageKey: "qualified", label: "Qualified" };
+      }
+      if (compact.includes("quot")) {
+        return { stageKey: "quoting", label: "Quoting" };
+      }
+      if (compact.includes("negotiat")) {
+        return { stageKey: "negotiating", label: "Negotiating" };
+      }
+      if (compact.includes("pipeline")) {
+        return { stageKey: "pipeline", label: "Pipeline" };
+      }
+      return { stageKey: normaliseKey(stageLabel || stageKey), label: stageLabel || "Unknown" };
+    }
+
+    function buildGpMixByMonth(rows, gpAccessor) {
+      const map = new Map();
+      rows.forEach(row => {
+        const key = monthKey(row.year, row.month);
+        if (!map.has(key)) {
+          map.set(key, {
+            year: row.year,
+            month: row.month,
+            monthLabel: row.monthLabel,
+            recurringGp: 0,
+            nonRecurringGp: 0,
+            totalGp: 0
+          });
+        }
+        const item = map.get(key);
+        const gp = gpAccessor(row);
+        const kind = classifyDealType(row.dealTypeKey);
+        item.totalGp += gp;
+        if (kind === "recurring") item.recurringGp += gp;
+        if (kind === "nonRecurring") item.nonRecurringGp += gp;
+      });
+      return [...map.values()].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
+    }
+
+    function buildStageTotals(rows) {
+      const map = new Map();
+      rows.forEach(row => {
+        const stageBucket = normalisePipelineStage(row.stageKey, row.stage);
+        if (!map.has(stageBucket.label)) {
+          map.set(stageBucket.label, { stage: stageBucket.label, stageKey: stageBucket.stageKey, totalGp: 0, deals: 0 });
+        }
+        const item = map.get(stageBucket.label);
+        item.totalGp += openGp(row);
+        item.deals += 1;
+      });
+      return [...map.values()].sort((a, b) => {
+        const orderDiff = (stageOrder[a.stageKey] ?? 99) - (stageOrder[b.stageKey] ?? 99);
+        if (orderDiff !== 0) return orderDiff;
+        return b.totalGp - a.totalGp;
+      });
+    }
+
+    function renderExecReport(periodKey) {
+      const periodRows = rowsForPeriod(periodKey);
+      const closedRows = periodRows.filter(row => isClosedWon(row.stageKey));
+      const openRows = periodRows.filter(row => isOpenStage(row.stageKey));
+      const closedSummary = summariseClosed(closedRows);
+      const openSummary = summariseOpen(openRows);
+      const productivity = summariseProductivity(workbookRows, periodKey);
+      const recurringCoverage = buildRecurringCostCoverage();
+      const closedByService = groupClosedByServiceType(closedRows);
+      const openByStageMonth = groupOpenByStageAndMonth(openRows);
+      const contributorRows = buildRecurringContributorRows();
+
+      setText("execClosedTotalRevenue", money(closedSummary.totalRevenue));
+      setText("execClosedTotalGp", money(closedSummary.totalGp));
+      setText("execClosedDeals", String(closedSummary.deals));
+      setText("execClosedRecurringRevenue", money(closedSummary.recurringRevenue));
+      setText("execClosedRecurringGp", money(closedSummary.recurringGp));
+      setText("execClosedNonRecurringRevenue", money(closedSummary.nonRecurringRevenue));
+      setText("execClosedNonRecurringGp", money(closedSummary.nonRecurringGp));
+      setText("execPipelineDeals", String(openRows.length));
+      setText("execOpenGp", money(openSummary.totalGp));
+      setText("execOpenRevenue", money(openSummary.totalRevenue));
+      setText("execOppsAdded", String(productivity.addedCount));
+      setText("execAvgOpenDays", formatDays(openSummary.avgOpenDays));
+      setText("execAvgDaysToClose", formatDays(closedSummary.avgDaysToClose));
+      setText("execCostCoverMonth", recurringCoverage && recurringCoverage.firstCoveredMonth ? recurringCoverage.firstCoveredMonth : "Not covered");
+
+      renderTable("execClosedServiceBody", closedByService, item => [
+        item.serviceType,
+        String(item.deals),
+        money(item.recurringRevenue),
+        money(item.recurringGp),
+        money(item.nonRecurringRevenue),
+        money(item.nonRecurringGp),
+        money(item.totalRevenue),
+        money(item.totalGp)
+      ], [0]);
+
+      renderTable("execPipelineBody", openByStageMonth, item => [
+        item.monthLabel,
+        item.stage,
+        item.customerList,
+        formatDays(item.avgOpenDays),
+        money(item.recurringRevenue),
+        money(item.recurringGp),
+        money(item.nonRecurringRevenue),
+        money(item.nonRecurringGp),
+        money(item.totalRevenue),
+        money(item.totalGp)
+      ], [0, 1, 2]);
+
+      renderTable("execProductivityBody", groupAddedToPipelineByMonth(workbookRows, periodKey, true), item => [
+        item.salesOwner,
+        item.addedMonth,
+        String(item.opportunitiesAdded),
+        String(item.recurringDeals),
+        String(item.nonRecurringDeals)
+      ], [0, 1]);
+
+      renderTable("execCostCoverageBody", recurringCoverage ? recurringCoverage.rows : [], item => [
+        item.monthLabel,
+        money(item.recurringGp),
+        money(item.monthlyCost),
+        money(item.gap),
+        item.covered ? "Covered" : "Gap",
+        String(item.contributorCount)
+      ], [0, 4, 5]);
+
+      renderTable("execRecurringContributorsBody", contributorRows, item => [
+        item.monthLabel,
+        item.customer,
+        item.description,
+        item.stage,
+        item.salesOwner,
+        money(item.recurringGp)
+      ], [0, 1, 2, 3, 4]);
+
+      execCostCoverageEmpty.classList.toggle("hidden", Boolean(recurringCoverage));
+      renderExecCharts(closedSummary, openSummary, openRows, recurringCoverage);
+      status(`Executive report for ${periodLabel(periodKey)}. Closed won and pipeline values are sourced from Sales Tracker.`);
+    }
+
+    function renderSalesReport(periodKey, salesperson) {
+      const periodRows = rowsForPeriod(periodKey).filter(row => row.salesOwner === salesperson);
+      const closedRows = periodRows.filter(row => isClosedWon(row.stageKey));
+      const openRows = periodRows.filter(row => isOpenStage(row.stageKey));
+      const salespersonRows = workbookRows.filter(row => row.salesOwner === salesperson);
+      const closedSummary = summariseClosed(closedRows);
+      const openSummary = summariseOpen(openRows);
+      const productivity = summariseProductivity(salespersonRows, periodKey);
+      const targetSummary = buildSalesTargetsSummary(salespersonRows);
+      const closedByService = groupClosedByServiceType(closedRows);
+
+      setText("salesClosedDeals", String(closedSummary.deals));
+      setText("salesPipelineDeals", String(openRows.length));
+      setText("salesRecurringRevenue", money(closedSummary.recurringRevenue));
+      setText("salesRecurringGp", money(closedSummary.recurringGp));
+      setText("salesNonRecurringRevenue", money(closedSummary.nonRecurringRevenue));
+      setText("salesNonRecurringGp", money(closedSummary.nonRecurringGp));
+      setText("salesRecurringCommissionEarned", money(closedSummary.recurringCommissionEarned));
+      setText("salesNonRecurringCommissionEarned", money(closedSummary.nonRecurringCommissionEarned));
+      setText("salesCommissionEarned", money(closedSummary.totalGp * COMMISSION_RATE));
+      setText("salesPossibleCommission", money(openSummary.possibleCommission));
+      setText("salesWeightedCommission", money(openSummary.weightedCommission));
+      setText("salesOppsAdded", String(productivity.addedCount));
+      setText("salesAvgOpenDays", formatDays(openSummary.avgOpenDays));
+      setText("salesAvgDaysToClose", formatDays(closedSummary.avgDaysToClose));
+
+      renderTable("salesTargetBody", targetSummary, item => [
+        item.name,
+        money(item.target),
+        money(item.actual),
+        money(item.gap),
+        item.attainment
+      ], [0, 4]);
+
+      renderTable("salesClosedServiceBody", closedByService, item => [
+        item.serviceType,
+        String(item.deals),
+        money(item.recurringRevenue),
+        money(item.recurringGp),
+        money(item.nonRecurringRevenue),
+        money(item.nonRecurringGp),
+        money(item.totalRevenue),
+        money(item.totalGp)
+      ], [0]);
+
+      renderTable("salesPipelineBody", groupOpenByStageAndMonth(openRows), item => [
+        item.stage,
+        item.monthLabel,
+        item.customerList,
+        String(item.deals),
+        formatDays(item.avgOpenDays),
+        money(item.recurringRevenue),
+        money(item.recurringGp),
+        money(item.nonRecurringRevenue),
+        money(item.nonRecurringGp),
+        money(item.totalGp),
+        money(item.possibleCommission),
+        money(item.weightedCommission)
+      ], [0, 1, 2]);
+
+      renderTable("salesProductivityBody", groupAddedToPipelineByMonth(salespersonRows, periodKey, false), item => [
+        item.addedMonth,
+        String(item.opportunitiesAdded),
+        String(item.recurringDeals),
+        String(item.nonRecurringDeals)
+      ], [0]);
+
+      renderSalesCharts(targetSummary, closedSummary, openSummary, openRows, closedByService);
+      status(`Salesperson report for ${salesperson} in ${periodLabel(periodKey)}. Commission is calculated at 25% of GP.`);
+    }
+
+    function renderTable(bodyId, rows, rowMapper, leftAlignColumns = [0, 1]) {
+      const body = document.getElementById(bodyId);
+      body.innerHTML = "";
+
+      rows.forEach(row => {
+        const tr = document.createElement("tr");
+        rowMapper(row).forEach((cell, index) => {
+          const td = document.createElement("td");
+          td.textContent = cell;
+          if (leftAlignColumns.includes(index)) td.style.textAlign = "left";
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+    }
+
+    function renderExecCharts(closedSummary, openSummary, openRows, recurringCoverage) {
+      renderChart("execMixChart", "execMixChart", buildDoughnutConfig({
+        labels: [
+          "Closed recurring GP",
+          "Closed non-recurring GP",
+          "Open recurring GP",
+          "Open non-recurring GP"
+        ],
+        values: [
+          closedSummary.recurringGp,
+          closedSummary.nonRecurringGp,
+          buildGpMixByMonth(openRows, openGp).reduce((sum, item) => sum + item.recurringGp, 0),
+          buildGpMixByMonth(openRows, openGp).reduce((sum, item) => sum + item.nonRecurringGp, 0)
+        ],
+        colors: [COLORS.recurring, COLORS.nonRecurring, COLORS.recurringSoft, COLORS.nonRecurringSoft]
+      }));
+
+      const monthlyOpen = buildGpMixByMonth(openRows, openGp);
+      renderChart("execPipelineMonthChart", "execPipelineMonthChart", buildStackedBarConfig({
+        labels: monthlyOpen.map(item => item.monthLabel),
+        datasets: [
+          { label: "Recurring GP", data: monthlyOpen.map(item => item.recurringGp), backgroundColor: COLORS.recurring },
+          { label: "Non-recurring GP", data: monthlyOpen.map(item => item.nonRecurringGp), backgroundColor: COLORS.nonRecurring }
+        ],
+        currencyAxis: true
+      }));
+
+      const stageTotals = buildStageTotals(openRows);
+      renderChart("execStageChart", "execStageChart", buildBarConfig({
+        labels: stageTotals.map(item => `${item.stage} (${item.deals})`),
+        datasets: [
+          {
+            label: "Open pipeline GP",
+            data: stageTotals.map(item => item.totalGp),
+            backgroundColor: stageTotals.map((_, index) => COLORS.stage[index % COLORS.stage.length]),
+            borderRadius: 10
+          }
+        ],
+        currencyAxis: true,
+        horizontal: true
+      }));
+
+      const coverageRows = recurringCoverage ? recurringCoverage.rows : [];
+      renderChart("execCostCoverageChart", "execCostCoverageChart", buildLineConfig({
+        labels: coverageRows.map(item => item.monthLabel),
+        datasets: [
+          {
+            label: "Monthly recurring GP",
+            data: coverageRows.map(item => item.recurringGp),
+            borderColor: COLORS.recurring,
+            backgroundColor: "rgba(34, 197, 94, 0.16)",
+            fill: true,
+            tension: 0.28
+          },
+          {
+            label: "Monthly business cost",
+            data: coverageRows.map(item => item.monthlyCost),
+            borderColor: COLORS.cost,
+            backgroundColor: "rgba(239, 68, 68, 0.08)",
+            fill: false,
+            tension: 0.2
+          }
+        ],
+        currencyAxis: true
+      }));
+    }
+
+    function renderSalesCharts(targetSummary, closedSummary, openSummary, openRows, closedByService) {
+      renderChart("salesTargetChart", "salesTargetChart", buildBarConfig({
+        labels: targetSummary.map(item => item.name.replace("Managed recurring GP base ", "Base ").replace(" (12-month target)", " 12m").replace(" (24-month target)", " 24m")),
+        datasets: [
+          {
+            label: "Target",
+            data: targetSummary.map(item => item.target),
+            backgroundColor: COLORS.slate,
+            borderRadius: 10
+          },
+          {
+            label: "Actual",
+            data: targetSummary.map(item => item.actual),
+            backgroundColor: COLORS.total,
+            borderRadius: 10
+          }
+        ],
+        currencyAxis: true,
+        horizontal: true
+      }));
+
+      renderChart("salesCommissionChart", "salesCommissionChart", buildDoughnutConfig({
+        labels: [
+          "Recurring commission earned",
+          "Non-recurring commission earned",
+          "Weighted pipeline commission"
+        ],
+        values: [
+          closedSummary.recurringCommissionEarned,
+          closedSummary.nonRecurringCommissionEarned,
+          openSummary.weightedCommission
+        ],
+        colors: [COLORS.recurring, COLORS.nonRecurring, COLORS.weighted]
+      }));
+
+      const monthlyOpen = buildGpMixByMonth(openRows, openGp);
+      renderChart("salesPipelineMonthChart", "salesPipelineMonthChart", buildStackedBarConfig({
+        labels: monthlyOpen.map(item => item.monthLabel),
+        datasets: [
+          { label: "Recurring GP", data: monthlyOpen.map(item => item.recurringGp), backgroundColor: COLORS.recurring },
+          { label: "Non-recurring GP", data: monthlyOpen.map(item => item.nonRecurringGp), backgroundColor: COLORS.nonRecurring }
+        ],
+        currencyAxis: true
+      }));
+
+      renderChart("salesServiceChart", "salesServiceChart", buildBarConfig({
+        labels: closedByService.map(item => item.serviceType),
+        datasets: [
+          {
+            label: "Closed won GP",
+            data: closedByService.map(item => item.totalGp),
+            backgroundColor: closedByService.map((_, index) => COLORS.stage[index % COLORS.stage.length]),
+            borderRadius: 10
+          }
+        ],
+        currencyAxis: true
+      }));
+    }
+
+    function buildBarConfig({ labels, datasets, currencyAxis = false, horizontal = false }) {
+      const safe = ensureCartesianData(labels, datasets);
+      const xTicks = horizontal
+        ? (currencyAxis ? currencyTickConfig() : { color: "#42597f" })
+        : { color: "#42597f" };
+      const yTicks = horizontal
+        ? { color: "#42597f" }
+        : (currencyAxis ? currencyTickConfig() : { color: "#42597f" });
+      return {
+        type: "bar",
+        data: {
+          labels: safe.labels,
+          datasets: safe.datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: horizontal ? "y" : "x",
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { position: "top" },
+            tooltip: tooltipOptions(currencyAxis)
+          },
+          scales: {
+            x: {
+              stacked: false,
+              ticks: xTicks,
+              grid: { color: "rgba(15, 29, 52, 0.08)" }
+            },
+            y: {
+              stacked: false,
+              beginAtZero: true,
+              ticks: yTicks,
+              grid: { color: "rgba(15, 29, 52, 0.08)" }
+            }
+          }
+        }
+      };
+    }
+
+    function buildStackedBarConfig({ labels, datasets, currencyAxis = false }) {
+      const safe = ensureCartesianData(labels, datasets);
+      return {
+        type: "bar",
+        data: {
+          labels: safe.labels,
+          datasets: safe.datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { position: "top" },
+            tooltip: tooltipOptions(currencyAxis)
+          },
+          scales: {
+            x: {
+              stacked: true,
+              ticks: { color: "#42597f" },
+              grid: { color: "rgba(15, 29, 52, 0.08)" }
+            },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: currencyAxis ? currencyTickConfig() : { color: "#42597f" },
+              grid: { color: "rgba(15, 29, 52, 0.08)" }
+            }
+          }
+        }
+      };
+    }
+
+    function buildLineConfig({ labels, datasets, currencyAxis = false }) {
+      const safe = ensureCartesianData(labels, datasets);
+      return {
+        type: "line",
+        data: {
+          labels: safe.labels,
+          datasets: safe.datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { position: "top" },
+            tooltip: tooltipOptions(currencyAxis)
+          },
+          scales: {
+            x: {
+              ticks: { color: "#42597f" },
+              grid: { color: "rgba(15, 29, 52, 0.08)" }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: currencyAxis ? currencyTickConfig() : { color: "#42597f" },
+              grid: { color: "rgba(15, 29, 52, 0.08)" }
+            }
+          }
+        }
+      };
+    }
+
+    function buildDoughnutConfig({ labels, values, colors }) {
+      const safe = ensureCircularData(labels, values, colors);
+      return {
+        type: "doughnut",
+        data: {
+          labels: safe.labels,
+          datasets: [{
+            data: safe.values,
+            backgroundColor: safe.colors,
+            borderWidth: 0,
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "62%",
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: tooltipOptions(true)
+          }
+        }
+      };
+    }
+
+    function tooltipOptions(currencyAxis) {
+      return {
+        callbacks: {
+          label(context) {
+            const raw = context.raw ?? 0;
+            return `${context.dataset.label || context.label}: ${currencyAxis ? money(raw) : raw}`;
+          }
+        }
+      };
+    }
+
+    function currencyTickConfig() {
+      return {
+        color: "#42597f",
+        callback(value) {
+          return moneyShort(value);
+        }
+      };
+    }
+
+    function ensureCircularData(labels, values, colors) {
+      const hasValue = values.some(value => Math.abs(value) > 0);
+      if (!hasValue) {
+        return {
+          labels: ["No data"],
+          values: [1],
+          colors: ["#cbd5e1"]
+        };
+      }
+      return { labels, values, colors };
+    }
+
+    function ensureCartesianData(labels, datasets) {
+      if (labels.length) {
+        return { labels, datasets };
+      }
+      return {
+        labels: ["No data"],
+        datasets: datasets.map(dataset => ({ ...dataset, data: [0] }))
+      };
+    }
+
+    function renderChart(chartKey, canvasId, config) {
+      if (typeof Chart === "undefined") return;
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      if (chartRegistry[chartKey]) {
+        chartRegistry[chartKey].destroy();
+      }
+      chartRegistry[chartKey] = new Chart(canvas, config);
+    }
+
+    function setText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function money(value) {
+      return new Intl.NumberFormat("en-GB", {
+        style: "currency",
+        currency: "GBP",
+        maximumFractionDigits: 0
+      }).format(value || 0);
+    }
+
+    function moneyShort(value) {
+      const number = Number(value || 0);
+      const abs = Math.abs(number);
+      if (abs >= 1000000) return `£${(number / 1000000).toFixed(1)}m`;
+      if (abs >= 1000) return `£${(number / 1000).toFixed(0)}k`;
+      return `£${Math.round(number)}`;
+    }
+  </script>
+
+
+</body></html>
