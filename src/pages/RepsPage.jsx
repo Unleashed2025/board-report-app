@@ -1,4 +1,5 @@
 import { Bar } from 'react-chartjs-2';
+import Layout from '../components/Layout';
 import { reps } from '../data/salesData';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
@@ -17,6 +18,7 @@ const chartOptions = {
 
 export default function RepsPage() {
   return (
+    <Layout>
     <div className="space-y-6 pb-6">
       <section className="grid gap-4 xl:grid-cols-4">
         {reps.map((rep) => {
@@ -147,5 +149,6 @@ export default function RepsPage() {
         </div>
       </section>
     </div>
+    </Layout>
   );
 }

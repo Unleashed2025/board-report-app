@@ -1,4 +1,5 @@
 import { Bar, Line } from 'react-chartjs-2';
+import Layout from '../components/Layout';
 import { monthlyForecast, pipelineByStage } from '../data/salesData';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
@@ -16,6 +17,7 @@ const chartOptions = {
 
 export default function PipelinePage() {
   return (
+    <Layout>
     <div className="grid gap-6 pb-6 xl:grid-cols-2">
       <section className={cardClass}>
         <div className="mb-6">
@@ -110,5 +112,6 @@ export default function PipelinePage() {
         </div>
       </section>
     </div>
+    </Layout>
   );
 }

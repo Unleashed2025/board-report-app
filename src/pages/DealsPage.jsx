@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Layout from '../components/Layout';
 import { dealTypes, deals, ownerList, stageList } from '../data/salesData';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
@@ -35,6 +36,7 @@ export default function DealsPage() {
   }, [owner, search, stage, type]);
 
   return (
+    <Layout>
     <section className={`${cardClass} space-y-6 pb-2`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -112,5 +114,6 @@ export default function DealsPage() {
         </table>
       </div>
     </section>
+    </Layout>
   );
 }

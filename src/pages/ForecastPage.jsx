@@ -1,4 +1,5 @@
 import { Bar } from 'react-chartjs-2';
+import Layout from '../components/Layout';
 import { forecast } from '../data/salesData';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
@@ -8,6 +9,7 @@ const gridColor = 'rgba(90, 122, 149, 0.18)';
 
 export default function ForecastPage() {
   return (
+    <Layout>
     <div className="grid gap-6 pb-6 xl:grid-cols-[1.6fr,1fr]">
       <section className={cardClass}>
         <div className="mb-6">
@@ -91,5 +93,6 @@ export default function ForecastPage() {
         </div>
       </section>
     </div>
+    </Layout>
   );
 }
