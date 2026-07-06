@@ -6,13 +6,16 @@ const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
   const [data, setData] = useState(defaultSalesData);
+  const [boardPlan, setBoardPlan] = useState(null);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [sourceFilename, setSourceFilename] = useState('');
 
   const updateFromExcel = useCallback((workbook, filename = '') => {
     const nextData = parseExcel(workbook);
-    setData(nextData);
+    const { boardPlan: plan, ...salesData } = nextData;
+    setData(salesData);
+    setBoardPlan(plan || null);
     setDataLoaded(true);
     setLastUpdated(new Date());
     setSourceFilename(filename || workbook?.Props?.Title || 'Uploaded workbook');
@@ -21,12 +24,13 @@ export function DataProvider({ children }) {
   const value = useMemo(
     () => ({
       ...data,
+      boardPlan,
       dataLoaded,
       lastUpdated,
       sourceFilename,
       updateFromExcel,
     }),
-    [data, dataLoaded, lastUpdated, sourceFilename, updateFromExcel],
+    [data, boardPlan, dataLoaded, lastUpdated, sourceFilename, updateFromExcel],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
