@@ -72,6 +72,26 @@ export function parseBoardPlan(workbook) {
   const marketing = getRow(28);
   const totalCost = getRow(29);
 
+  // Parse individual employee costs (rows 18-22, between Wages and NI)
+  // Then apportion NI, pensions, car proportionally by wage share for true cost
+  const totalWagesAnnual = toNum((rows[17] || [])[months.length + 1]);
+  const totalNIAnnual = toNum((rows[23] || [])[months.length + 1]);
+  const totalPensionsAnnual = toNum((rows[24] || [])[months.length + 1]);
+
+  const employeeCosts = [];
+  for (let r = 18; r < 23; r++) {
+    const name = String((rows[r] || [])[0] || '').trim();
+    if (!name) continue;
+    const grossWage = toNum((rows[r] || [])[months.length + 1]);
+    if (grossWage > 0) {
+      const wageShare = totalWagesAnnual > 0 ? grossWage / totalWagesAnnual : 0;
+      const niShare = Math.round(totalNIAnnual * wageShare);
+      const pensionShare = Math.round(totalPensionsAnnual * wageShare);
+      const trueCost = grossWage + niShare + pensionShare;
+      employeeCosts.push({ name, grossWage, niShare, pensionShare, trueCost, monthlyData: getRow(r) });
+    }
+  }
+
   // Parse outputs (rows 35-40)
   const grossProfit = getRow(35);
   const netProfit = getRow(37);
@@ -206,6 +226,7 @@ export function parseBoardPlan(workbook) {
     costBreakdown,
     gpByServiceType,
     gpByRep,
+    employeeCosts,
     closedTotalGP,
     closedRecurringGP,
     closedNonRecurringGP,

@@ -106,7 +106,7 @@ export default function OverviewPage() {
 
 function BoardPlanDashboard({ boardPlan }) {
   const {
-    monthlyData, costBreakdown, gpByServiceType, gpByRep,
+    monthlyData, costBreakdown, gpByServiceType, gpByRep, employeeCosts,
     closedTotalGP, closedRecurringGP, closedNonRecurringGP,
     totalCostTotal, ebitdaTotal, cumulativeEBITDAFinal,
     closedWonDeals, negotiatingDeals, quotingDeals, earlyStageDeals,
@@ -120,6 +120,20 @@ function BoardPlanDashboard({ boardPlan }) {
   // GP by deal type for pie
   const recurringDeals = [...closedWonDeals, ...negotiatingDeals].filter(d => d.dealType === 'Recurring');
   const nonRecurringDeals = [...closedWonDeals, ...negotiatingDeals].filter(d => d.dealType === 'Non-Recurring');
+
+  // Current closed-won metrics split by deal type
+  const cwRecurring = closedWonDeals.filter(d => d.dealType === 'Recurring');
+  const cwNonRecurring = closedWonDeals.filter(d => d.dealType !== 'Recurring');
+  const currentMonthlyRecurringRevenue = cwRecurring.reduce((s, d) => s + d.revenue, 0);
+  const currentMonthlyRecurringGP = cwRecurring.reduce((s, d) => s + d.profit, 0);
+  const currentNonRecurringRevenue = cwNonRecurring.reduce((s, d) => s + d.revenue, 0);
+  const currentNonRecurringGP = cwNonRecurring.reduce((s, d) => s + d.profit, 0);
+
+  // Significant deals: recurring revenue >= £1,000/month OR non-recurring revenue >= £7,500
+  const sigDeals = [...closedWonDeals, ...negotiatingDeals].filter(d =>
+    (d.dealType === 'Recurring' && d.revenue >= 1000) ||
+    (d.dealType !== 'Recurring' && d.revenue >= 7500)
+  ).sort((a, b) => b.revenue - a.revenue);
 
   return (
     <Layout>
@@ -146,12 +160,152 @@ function BoardPlanDashboard({ boardPlan }) {
         </div>
 
         {/* KPI Cards */}
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <KPICard label="Total GP (Forecast)" value={money(closedTotalGP)} accent="text-white" icon="£" />
-          <KPICard label="Recurring GP" value={money(closedRecurringGP)} accent="text-[#0EA5E9]" icon="↻" />
-          <KPICard label="Non-Recurring GP" value={money(closedNonRecurringGP)} accent="text-[#f59e0b]" icon="→" />
-          <KPICard label="Total Business Costs" value={money(totalCostTotal)} accent="text-[#ef4444]" icon="−" />
-          <KPICard label="Year-End EBITDA" value={money(cumulativeEBITDAFinal)} accent={cumulativeEBITDAFinal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'} icon="Σ" />
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <KPICard label="Monthly Recurring Revenue" value={money(currentMonthlyRecurringRevenue)} accent="text-[#0EA5E9]" icon="↻" subtitle="Closed-Won recurring contracts" />
+          <KPICard label="Non-Recurring Revenue" value={money(currentNonRecurringRevenue)} accent="text-[#f59e0b]" icon="→" subtitle="Closed-Won project revenue" />
+          <KPICard label="Monthly Recurring GP" value={money(currentMonthlyRecurringGP)} accent="text-[#059669]" icon="↻" subtitle="Closed-Won recurring profit" />
+          <KPICard label="Non-Recurring GP" value={money(currentNonRecurringGP)} accent="text-[#8b5cf6]" icon="→" subtitle="Closed-Won project profit" />
+        </section>
+
+        {/* Rep Target Tracking — £24k monthly recurring GP */}
+        <section className={cardClass}>
+          <h2 className="text-lg font-bold text-white mb-1">Sales Rep Target Tracker</h2>
+          <p className="text-xs text-[#5A7A95] mb-5">Target: £24,000 monthly recurring GP per rep. Progress from Closed-Won, Negotiating &amp; Quoting deals. Early stage shown separately.</p>
+          {(() => {
+            const TARGET = 24000;
+            const allDeals = [...closedWonDeals, ...negotiatingDeals, ...quotingDeals, ...earlyStageDeals];
+            const owners = [...new Set(allDeals.map(d => d.owner).filter(Boolean))].sort();
+            const repTargets = owners.map(owner => {
+              const recurringFilter = (d) => d.owner === owner && d.dealType === 'Recurring';
+              const cwRecGP = closedWonDeals.filter(recurringFilter).reduce((s, d) => s + d.profit, 0);
+              const negRecGP = negotiatingDeals.filter(recurringFilter).reduce((s, d) => s + d.profit, 0);
+              const quotRecGP = quotingDeals.filter(recurringFilter).reduce((s, d) => s + d.profit, 0);
+              const pipelineGP = cwRecGP + negRecGP + quotRecGP;
+              const earlyRecGP = earlyStageDeals.filter(recurringFilter).reduce((s, d) => s + d.profit, 0);
+              return { owner, cwRecGP, negRecGP, quotRecGP, pipelineGP, earlyRecGP, pct: (pipelineGP / TARGET) * 100 };
+            }).filter(r => r.pipelineGP > 0 || r.earlyRecGP > 0);
+            return (
+              <div className="space-y-5">
+                {repTargets.map(r => (
+                  <div key={r.owner}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-white font-medium text-sm">{r.owner}</span>
+                      <span className="text-sm font-bold text-white">{money(r.pipelineGP)} <span className="text-[#5A7A95] font-normal text-xs">/ {money(TARGET)}</span></span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="relative h-7 rounded-full bg-[#0D2338] overflow-hidden">
+                      <div className="absolute inset-y-0 left-0 bg-[#059669] rounded-l-full" style={{ width: `${Math.min((r.cwRecGP / TARGET) * 100, 100)}%` }} />
+                      <div className="absolute inset-y-0 bg-[#f59e0b]" style={{ left: `${Math.min((r.cwRecGP / TARGET) * 100, 100)}%`, width: `${Math.min((r.negRecGP / TARGET) * 100, 100 - (r.cwRecGP / TARGET) * 100)}%` }} />
+                      <div className="absolute inset-y-0 bg-[#8b5cf6]" style={{ left: `${Math.min(((r.cwRecGP + r.negRecGP) / TARGET) * 100, 100)}%`, width: `${Math.min((r.quotRecGP / TARGET) * 100, 100 - ((r.cwRecGP + r.negRecGP) / TARGET) * 100)}%` }} />
+                      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow">{r.pct.toFixed(0)}%</span>
+                    </div>
+                    <div className="flex gap-4 mt-1.5 text-[10px] text-[#5A7A95]">
+                      <span><span className="inline-block w-2 h-2 rounded-full bg-[#059669] mr-1"></span>Closed-Won: {money(r.cwRecGP)}</span>
+                      <span><span className="inline-block w-2 h-2 rounded-full bg-[#f59e0b] mr-1"></span>Negotiating: {money(r.negRecGP)}</span>
+                      <span><span className="inline-block w-2 h-2 rounded-full bg-[#8b5cf6] mr-1"></span>Quoting: {money(r.quotRecGP)}</span>
+                      {r.earlyRecGP > 0 && <span className="text-[#5A7A95]">| Early Stage (Lead/Qualified): {money(r.earlyRecGP)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </section>
+
+        {/* Rep Target Timeline — cumulative recurring GP over time to Dec 2027 */}
+        <section className={cardClass}>
+          <h2 className="text-lg font-bold text-white mb-1">Target Achievement Timeline</h2>
+          <p className="text-xs text-[#5A7A95] mb-4">Cumulative monthly recurring GP per rep (based on deal billing start months). Projected to Dec 2027.</p>
+          {(() => {
+            const TARGET = 24000;
+            // Build month labels from Nov 2025 to Dec 2027
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const timelineLabels = [];
+            // Nov 2025, Dec 2025, then Jan 2026 - Dec 2026, then Jan 2027 - Dec 2027
+            timelineLabels.push('Nov 2025', 'Dec 2025');
+            for (let m = 0; m < 12; m++) timelineLabels.push(monthNames[m] + ' 2026');
+            for (let m = 0; m < 12; m++) timelineLabels.push(monthNames[m] + ' 2027');
+
+            // Get all recurring pipeline deals with predicted months
+            const pipelineDeals = [...closedWonDeals, ...negotiatingDeals, ...quotingDeals].filter(d => d.dealType === 'Recurring' && d.predictedMonth);
+            const owners = [...new Set(pipelineDeals.map(d => d.owner).filter(Boolean))].sort();
+
+            const colors = ['#0EA5E9', '#059669', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444'];
+            const datasets = owners.map((owner, oi) => {
+              // For each month, calculate cumulative recurring GP (deals that have started billing by that month)
+              const ownerDeals = pipelineDeals.filter(d => d.owner === owner);
+              const cumulative = timelineLabels.map(label => {
+                const labelIdx = timelineLabels.indexOf(label);
+                let total = 0;
+                ownerDeals.forEach(d => {
+                  const dealIdx = timelineLabels.indexOf(d.predictedMonth);
+                  if (dealIdx !== -1 && dealIdx <= labelIdx) total += d.profit;
+                });
+                return total;
+              });
+              return {
+                label: owner,
+                data: cumulative,
+                borderColor: colors[oi % colors.length],
+                backgroundColor: colors[oi % colors.length] + '20',
+                fill: false,
+                tension: 0.3,
+                pointRadius: 2,
+                pointBackgroundColor: colors[oi % colors.length],
+              };
+            });
+
+            // Add target line
+            datasets.push({
+              label: '£24k Target',
+              data: timelineLabels.map(() => TARGET),
+              borderColor: '#ef4444',
+              borderDash: [8, 4],
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false,
+            });
+
+            // Calculate when each rep hits target
+            const hitDates = owners.map(owner => {
+              const ds = datasets.find(d => d.label === owner);
+              const hitIdx = ds?.data.findIndex(v => v >= TARGET);
+              return { owner, hitMonth: hitIdx >= 0 ? timelineLabels[hitIdx] : 'Not in forecast' };
+            });
+
+            return (
+              <>
+                <div className="h-80">
+                  <Line
+                    data={{ labels: timelineLabels, datasets }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      interaction: { mode: 'index', intersect: false },
+                      plugins: {
+                        legend: { labels: { color: '#E2E8F0' } },
+                        tooltip: { callbacks: { label: (ctx) => ctx.raw != null ? `${ctx.dataset.label}: ${money(ctx.raw)}` : '' } },
+                      },
+                      scales: {
+                        x: { ticks: { color: axisColor, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 }, grid: { color: gridColor } },
+                        y: { ticks: { color: axisColor, callback: (v) => '£' + (v / 1000).toFixed(0) + 'k' }, grid: { color: gridColor } },
+                      },
+                    }}
+                  />
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {hitDates.map(h => (
+                    <div key={h.owner} className="flex items-center gap-2 rounded-lg bg-[#0D2338] px-3 py-2">
+                      <span className="text-sm text-white font-medium">{h.owner}</span>
+                      <span className={`text-xs font-bold ${h.hitMonth !== 'Not in forecast' ? 'text-[#059669]' : 'text-[#f59e0b]'}`}>
+                        {h.hitMonth !== 'Not in forecast' ? `Hits target: ${h.hitMonth}` : 'Not reached by Dec 2027'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </section>
 
         {/* GP Split + Recurring GP vs Costs */}
@@ -190,45 +344,94 @@ function BoardPlanDashboard({ boardPlan }) {
             </div>
           </div>
 
-          {/* Monthly Recurring GP vs Costs */}
+          {/* Monthly Recurring GP vs Costs — with 2027 projection */}
           <div className={cardClass}>
             <h2 className="text-lg font-bold text-white mb-1">Monthly Recurring GP vs Business Costs</h2>
-            <p className="text-xs text-[#5A7A95] mb-4">Target: recurring GP line crosses above costs = self-sustaining business</p>
+            <p className="text-xs text-[#5A7A95] mb-4">Target: recurring GP line crosses above costs = self-sustaining business. Dashed = projected 2027.</p>
             <div className="h-80">
               <Line
-                data={{
-                  labels: monthlyData.map(m => m.month),
-                  datasets: [
-                    {
-                      label: 'Accumulative Recurring GP',
-                      data: monthlyData.map(m => m.recurringGP),
-                      borderColor: '#0EA5E9',
-                      backgroundColor: 'rgba(14, 165, 233, 0.1)',
-                      fill: true,
-                      tension: 0.3,
-                      pointRadius: 4,
-                      pointBackgroundColor: '#0EA5E9',
-                    },
-                    {
-                      label: 'Monthly Business Costs',
-                      data: monthlyData.map(m => m.totalCost),
-                      borderColor: '#ef4444',
-                      backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                      fill: true,
-                      tension: 0.3,
-                      borderDash: [6, 3],
-                      pointRadius: 4,
-                      pointBackgroundColor: '#ef4444',
-                    },
-                  ],
-                }}
+                data={(() => {
+                  // Build projected months into 2027 until breakeven or +12 months
+                  const lastGP = monthlyData[monthlyData.length - 1]?.recurringGP || 0;
+                  const lastCost = monthlyData[monthlyData.length - 1]?.totalCost || 0;
+                  // Estimate monthly GP growth from last 6 months
+                  const recent = monthlyData.slice(-6).filter(m => m.recurringGP > 0);
+                  const avgGrowth = recent.length >= 2
+                    ? (recent[recent.length - 1].recurringGP - recent[0].recurringGP) / (recent.length - 1)
+                    : 500;
+                  const projectedMonths = [];
+                  let gp = lastGP;
+                  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                  let projMonth = 0; // Jan 2027
+                  while (projMonth < 12) {
+                    gp += avgGrowth;
+                    projectedMonths.push({ month: monthNames[projMonth] + ' 2027', recurringGP: Math.round(gp), totalCost: lastCost });
+                    if (gp >= lastCost) break;
+                    projMonth++;
+                  }
+                  const allLabels = [...monthlyData.map(m => m.month), ...projectedMonths.map(m => m.month)];
+                  const actualGP = monthlyData.map(m => m.recurringGP);
+                  const actualCost = monthlyData.map(m => m.totalCost);
+                  const projGP = [...new Array(monthlyData.length).fill(null), ...projectedMonths.map(m => m.recurringGP)];
+                  const projCost = [...new Array(monthlyData.length).fill(null), ...projectedMonths.map(m => m.totalCost)];
+                  // Connect projection to last actual point
+                  projGP[monthlyData.length - 1] = lastGP;
+                  projCost[monthlyData.length - 1] = lastCost;
+                  return {
+                    labels: allLabels,
+                    datasets: [
+                      {
+                        label: 'Recurring GP (Actual)',
+                        data: [...actualGP, ...new Array(projectedMonths.length).fill(null)],
+                        borderColor: '#0EA5E9',
+                        backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#0EA5E9',
+                      },
+                      {
+                        label: 'Recurring GP (Projected)',
+                        data: projGP,
+                        borderColor: '#0EA5E9',
+                        borderDash: [6, 4],
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#0EA5E9',
+                      },
+                      {
+                        label: 'Monthly Business Costs',
+                        data: [...actualCost, ...new Array(projectedMonths.length).fill(null)],
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ef4444',
+                      },
+                      {
+                        label: 'Costs (Projected)',
+                        data: projCost,
+                        borderColor: '#ef4444',
+                        borderDash: [6, 4],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#ef4444',
+                      },
+                    ],
+                  };
+                })()}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
                   interaction: { mode: 'index', intersect: false },
                   plugins: {
                     legend: { labels: { color: '#E2E8F0' } },
-                    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${money(ctx.raw)}` } },
+                    tooltip: { callbacks: { label: (ctx) => ctx.raw != null ? `${ctx.dataset.label}: ${money(ctx.raw)}` : '' } },
+                    annotation: undefined,
                   },
                   scales: {
                     x: { ticks: { color: axisColor, maxRotation: 45 }, grid: { color: gridColor } },
@@ -237,6 +440,20 @@ function BoardPlanDashboard({ boardPlan }) {
                 }}
               />
             </div>
+            {breakevenMonth ? (
+              <p className="mt-3 text-sm text-[#059669] font-medium">✓ Breakeven reached: {breakevenMonth.month}</p>
+            ) : (
+              <p className="mt-3 text-sm text-[#f59e0b] font-medium">⟶ Projected breakeven: {(() => {
+                const lastGP = monthlyData[monthlyData.length - 1]?.recurringGP || 0;
+                const lastCost = monthlyData[monthlyData.length - 1]?.totalCost || 0;
+                const recent = monthlyData.slice(-6).filter(m => m.recurringGP > 0);
+                const avgGrowth = recent.length >= 2 ? (recent[recent.length - 1].recurringGP - recent[0].recurringGP) / (recent.length - 1) : 500;
+                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                let gp = lastGP;
+                for (let i = 0; i < 24; i++) { gp += avgGrowth; if (gp >= lastCost) return monthNames[i % 12] + ' ' + (2027 + Math.floor(i / 12)); }
+                return 'Beyond 2028';
+              })()}</p>
+            )}
           </div>
         </section>
 
@@ -323,7 +540,90 @@ function BoardPlanDashboard({ boardPlan }) {
           </div>
         </section>
 
-        {/* GP by Rep + Significant Deals */}
+        {/* Rep Performance vs Employee Cost */}
+        <section className={cardClass}>
+          <h2 className="text-lg font-bold text-white mb-1">Deal Breakdown by Rep vs Individual Employee Cost</h2>
+          <p className="text-xs text-[#5A7A95] mb-4">Closed-Won + Negotiating + Quoting GP per rep compared to their annual cost to the business</p>
+          {(() => {
+            // Match reps to employee costs (fuzzy match on first name)
+            const allPipelineDeals = [...closedWonDeals, ...negotiatingDeals, ...quotingDeals];
+            const owners = [...new Set(allPipelineDeals.map(d => d.owner).filter(Boolean))].sort();
+            const repData = owners.map(owner => {
+              const ownerDeals = allPipelineDeals.filter(d => d.owner === owner);
+              const cwGP = ownerDeals.filter(d => d.stage === 'Closed-Won').reduce((s, d) => s + d.profit, 0);
+              const negGP = ownerDeals.filter(d => d.stage === 'Negotiating').reduce((s, d) => s + d.profit, 0);
+              const quotGP = ownerDeals.filter(d => d.stage === 'Quoting').reduce((s, d) => s + d.profit, 0);
+              const totalGP = cwGP + negGP + quotGP;
+              // Find matching employee cost
+              const firstName = owner.split(' ')[0].toLowerCase();
+              const empCost = (employeeCosts || []).find(e => e.name.toLowerCase().startsWith(firstName));
+              return { owner, cwGP, negGP, quotGP, totalGP, dealCount: ownerDeals.length, annualCost: empCost?.trueCost || 0, empName: empCost?.name || '' };
+            });
+            return (
+              <>
+                <div className="h-72 mb-6">
+                  <Bar
+                    data={{
+                      labels: repData.map(r => r.owner),
+                      datasets: [
+                        { label: 'Closed-Won GP', data: repData.map(r => r.cwGP), backgroundColor: '#059669', borderRadius: 4, stack: 'gp' },
+                        { label: 'Negotiating GP', data: repData.map(r => r.negGP), backgroundColor: '#f59e0b', borderRadius: 4, stack: 'gp' },
+                        { label: 'Quoting GP', data: repData.map(r => r.quotGP), backgroundColor: '#8b5cf6', borderRadius: 4, stack: 'gp' },
+                        { label: 'True Cost (Wage+NI+Pension)', data: repData.map(r => r.annualCost), backgroundColor: '#ef4444', borderRadius: 4 },
+                      ],
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { labels: { color: '#E2E8F0' } },
+                        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${money(ctx.raw)}` } },
+                      },
+                      scales: {
+                        x: { ticks: { color: axisColor }, grid: { color: gridColor } },
+                        y: { ticks: { color: axisColor, callback: (v) => '£' + (v / 1000).toFixed(0) + 'k' }, grid: { color: gridColor } },
+                      },
+                    }}
+                  />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                        <th className="text-left py-2 pr-4">Rep</th>
+                        <th className="text-right py-2 px-2">Closed-Won</th>
+                        <th className="text-right py-2 px-2">Negotiating</th>
+                        <th className="text-right py-2 px-2">Quoting</th>
+                        <th className="text-right py-2 px-2 font-bold">Total GP</th>
+                        <th className="text-right py-2 px-2">True Cost</th>
+                        <th className="text-right py-2 pl-2">ROI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {repData.map(r => {
+                        const roi = r.annualCost > 0 ? ((r.totalGP / r.annualCost) * 100).toFixed(0) : '—';
+                        const roiColor = r.annualCost === 0 ? 'text-[#5A7A95]' : (r.totalGP >= r.annualCost ? 'text-[#059669]' : 'text-[#ef4444]');
+                        return (
+                          <tr key={r.owner} className="border-b border-[#2A4A6F]/50 text-white">
+                            <td className="py-2.5 pr-4 font-medium">{r.owner} <span className="text-[#5A7A95] text-xs">({r.dealCount} deals)</span></td>
+                            <td className="text-right py-2.5 px-2 text-[#059669]">{money(r.cwGP)}</td>
+                            <td className="text-right py-2.5 px-2 text-[#f59e0b]">{money(r.negGP)}</td>
+                            <td className="text-right py-2.5 px-2 text-[#8b5cf6]">{money(r.quotGP)}</td>
+                            <td className="text-right py-2.5 px-2 font-bold">{money(r.totalGP)}</td>
+                            <td className="text-right py-2.5 px-2 text-[#ef4444]">{r.annualCost > 0 ? money(r.annualCost) : '—'}</td>
+                            <td className={`text-right py-2.5 pl-2 font-bold ${roiColor}`}>{roi}{roi !== '—' ? '%' : ''}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            );
+          })()}
+        </section>
+
+        {/* GP by Rep chart + Significant Deals */}
         <section className="grid gap-6 xl:grid-cols-2">
           <div className={cardClass}>
             <h2 className="text-lg font-bold text-white mb-4">GP Contribution by Sales Rep</h2>
@@ -375,9 +675,9 @@ function BoardPlanDashboard({ boardPlan }) {
 
           <div className={cardClass}>
             <h2 className="text-lg font-bold text-white mb-4">Significant Deals</h2>
-            <p className="text-xs text-[#5A7A95] mb-4">Top 5 deals by GP value in forecast</p>
-            <div className="space-y-3">
-              {significantDeals.map((d, i) => (
+            <p className="text-xs text-[#5A7A95] mb-4">Recurring ≥ £1,000/month revenue • Non-Recurring ≥ £7,500 revenue</p>
+            <div className="space-y-3 max-h-[28rem] overflow-y-auto">
+              {sigDeals.map((d, i) => (
                 <div key={d.id + i} className="flex items-center gap-3 rounded-lg bg-[#0D2338] p-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -385,15 +685,19 @@ function BoardPlanDashboard({ boardPlan }) {
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${d.stage === 'Closed-Won' ? 'bg-[#059669]/20 text-[#059669]' : 'bg-[#f59e0b]/20 text-[#f59e0b]'}`}>
                         {d.stage}
                       </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${d.dealType === 'Recurring' ? 'bg-[#0EA5E9]/20 text-[#0EA5E9]' : 'bg-[#8b5cf6]/20 text-[#8b5cf6]'}`}>
+                        {d.dealType}
+                      </span>
                     </div>
                     <p className="text-xs text-[#5A7A95] truncate mt-0.5">{d.description} • {d.owner}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-white">{money(d.profit)}</p>
-                    <p className="text-[10px] text-[#5A7A95]">{d.predictedMonth}</p>
+                    <p className="text-lg font-bold text-white">{money(d.revenue)}</p>
+                    <p className="text-[10px] text-[#5A7A95]">GP: {money(d.profit)} • {d.predictedMonth}</p>
                   </div>
                 </div>
               ))}
+              {sigDeals.length === 0 && <p className="text-sm text-[#5A7A95]">No deals meet significance thresholds yet.</p>}
             </div>
           </div>
         </section>
@@ -543,7 +847,7 @@ function DealTable({ deals, title, color, className = '' }) {
   );
 }
 
-function KPICard({ label, value, accent, icon }) {
+function KPICard({ label, value, accent, icon, subtitle }) {
   return (
     <div className={cardClass}>
       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#0EA5E9]/10 text-[#0EA5E9]">
@@ -551,6 +855,7 @@ function KPICard({ label, value, accent, icon }) {
       </div>
       <p className="text-xs text-[#5A7A95]">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${accent}`}>{value}</p>
+      {subtitle && <p className="text-[10px] text-[#5A7A95] mt-1">{subtitle}</p>}
     </div>
   );
 }
