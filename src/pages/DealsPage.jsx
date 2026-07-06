@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import Layout from '../components/Layout';
-import { dealTypes, deals, ownerList, stageList } from '../data/salesData';
+import { useData } from '../data/DataContext.jsx';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
 const currency = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
@@ -11,9 +11,11 @@ const stageBadgeClasses = {
   Quoting: 'border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#fcd34d]',
   Negotiating: 'border-[#ef4444]/40 bg-[#ef4444]/10 text-[#fca5a5]',
   'Closed-Won': 'border-[#059669]/40 bg-[#059669]/10 text-[#6ee7b7]',
+  'Closed-Lost': 'border-slate-500/40 bg-slate-500/10 text-slate-300',
 };
 
 export default function DealsPage() {
+  const { dealTypes, deals, ownerList, stageList } = useData();
   const [stage, setStage] = useState('All');
   const [owner, setOwner] = useState('All');
   const [type, setType] = useState('All');
@@ -33,7 +35,7 @@ export default function DealsPage() {
           .includes(query);
       return matchesStage && matchesOwner && matchesType && matchesSearch;
     });
-  }, [owner, search, stage, type]);
+  }, [deals, owner, search, stage, type]);
 
   return (
     <Layout>
@@ -97,7 +99,7 @@ export default function DealsPage() {
                 <td className="py-4 pr-4">{deal.customer}</td>
                 <td className="py-4 pr-4">{deal.owner}</td>
                 <td className="py-4 pr-4">
-                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${stageBadgeClasses[deal.stage]}`}>
+                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${stageBadgeClasses[deal.stage] || 'border-[#2A4A6F] bg-[#0D2338] text-white'}`}>
                     {deal.stage}
                   </span>
                 </td>

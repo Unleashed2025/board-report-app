@@ -5,6 +5,7 @@ export const stageProbabilities = {
   Quoting: 0.6,
   Negotiating: 0.8,
   'Closed-Won': 1,
+  'Closed-Lost': 0,
 };
 
 export const annualTargetPerRep = 138000;
@@ -97,11 +98,11 @@ export const forecast = [
   forecastPct: ((entry.totalClosedGP + entry.openTotalGP) / entry.target) * 100,
 }));
 
-const openDeals = deals.filter((deal) => deal.stage !== 'Closed-Won');
+const openDeals = deals.filter((deal) => !['Closed-Won', 'Closed-Lost'].includes(deal.stage));
 const unique = (values) => [...new Set(values)];
 const sum = (items, field) => items.reduce((total, item) => total + item[field], 0);
 
-export const stageList = Object.keys(stageProbabilities);
+export const stageList = ['Lead', 'To Be Contacted', 'Qualified', 'Quoting', 'Negotiating', 'Closed-Won', 'Closed-Lost'];
 export const ownerList = unique(deals.map((deal) => deal.owner));
 export const dealTypes = unique(deals.map((deal) => deal.dealType));
 
@@ -147,7 +148,7 @@ export const monthlyForecast = unique(deals.map((deal) => deal.predictedMonth))
   .map((month) => {
     const monthDeals = deals.filter((deal) => deal.predictedMonth === month);
     const closedDeals = monthDeals.filter((deal) => deal.stage === 'Closed-Won');
-    const pipelineDeals = monthDeals.filter((deal) => deal.stage !== 'Closed-Won');
+    const pipelineDeals = monthDeals.filter((deal) => !['Closed-Won', 'Closed-Lost'].includes(deal.stage));
     return {
       month,
       closedRevenue: sum(closedDeals, 'revenue'),
@@ -157,3 +158,17 @@ export const monthlyForecast = unique(deals.map((deal) => deal.predictedMonth))
       weightedPipelineProfit: pipelineDeals.reduce((total, deal) => total + deal.profit * stageProbabilities[deal.stage], 0),
     };
   });
+
+export const defaultSalesData = {
+  deals,
+  reps,
+  kpis,
+  forecast,
+  pipelineByStage,
+  pipelineByOwner,
+  pipelineByServiceType,
+  monthlyForecast,
+  stageList,
+  ownerList,
+  dealTypes,
+};
