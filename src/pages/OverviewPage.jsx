@@ -254,16 +254,66 @@ function BoardPlanDashboard({ boardPlan }) {
             </div>
           </section>
 
-          {/* Full Closed Won Deal List */}
+          {/* Monthly Recurring Deals */}
           <section className={cardClass}>
-            <h2 className="text-lg font-bold text-white mb-4">All Closed Won Deals</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">Monthly Recurring Revenue — Closed Won</h2>
+                <p className="text-xs text-[#5A7A95]">{cwRecurring.length} recurring contracts</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-[#5A7A95]">Monthly Revenue</p>
+                <p className="text-xl font-bold text-[#0EA5E9]">{money(currentMonthlyRecurringRevenue)}</p>
+                <p className="text-xs text-[#059669]">GP: {money(currentMonthlyRecurringGP)}</p>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
                   <th className="text-left py-2">Customer</th>
                   <th className="text-left py-2">Rep</th>
                   <th className="text-left py-2">Description</th>
-                  <th className="text-left py-2">Type</th>
+                  <th className="text-left py-2">Service</th>
+                  <th className="text-right py-2">Monthly Rev</th>
+                  <th className="text-right py-2">Monthly GP</th>
+                  <th className="text-right py-2">Start</th>
+                </tr></thead>
+                <tbody>
+                  {cwRecurring.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
+                    <tr key={d.id + i} className="border-b border-[#2A4A6F]/30 text-white">
+                      <td className="py-1.5 pr-2 font-medium">{d.customer}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95]">{d.owner}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95] truncate max-w-[180px]">{d.description}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95]">{d.serviceType}</td>
+                      <td className="py-1.5 text-right text-[#0EA5E9]">{money(d.revenue)}</td>
+                      <td className="py-1.5 text-right text-[#059669]">{money(d.profit)}</td>
+                      <td className="py-1.5 text-right text-[#5A7A95]">{d.predictedMonth}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Non-Recurring Deals */}
+          <section className={cardClass}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">Non-Recurring Revenue — Closed Won</h2>
+                <p className="text-xs text-[#5A7A95]">{cwNonRecurring.length} project deals</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-[#5A7A95]">Total Revenue</p>
+                <p className="text-xl font-bold text-[#f59e0b]">{money(currentNonRecurringRevenue)}</p>
+                <p className="text-xs text-[#059669]">GP: {money(currentNonRecurringGP)}</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                  <th className="text-left py-2">Customer</th>
+                  <th className="text-left py-2">Rep</th>
+                  <th className="text-left py-2">Description</th>
                   <th className="text-left py-2">Service</th>
                   <th className="text-right py-2">Revenue</th>
                   <th className="text-right py-2">Cost</th>
@@ -271,14 +321,13 @@ function BoardPlanDashboard({ boardPlan }) {
                   <th className="text-right py-2">Month</th>
                 </tr></thead>
                 <tbody>
-                  {closedWonDeals.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
+                  {cwNonRecurring.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
                     <tr key={d.id + i} className="border-b border-[#2A4A6F]/30 text-white">
                       <td className="py-1.5 pr-2 font-medium">{d.customer}</td>
                       <td className="py-1.5 pr-2 text-[#5A7A95]">{d.owner}</td>
                       <td className="py-1.5 pr-2 text-[#5A7A95] truncate max-w-[180px]">{d.description}</td>
-                      <td className="py-1.5 pr-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${d.dealType === 'Recurring' ? 'bg-[#0EA5E9]/20 text-[#0EA5E9]' : 'bg-[#f59e0b]/20 text-[#f59e0b]'}`}>{d.dealType}</span></td>
                       <td className="py-1.5 pr-2 text-[#5A7A95]">{d.serviceType}</td>
-                      <td className="py-1.5 text-right">{money(d.revenue)}</td>
+                      <td className="py-1.5 text-right text-[#f59e0b]">{money(d.revenue)}</td>
                       <td className="py-1.5 text-right text-[#ef4444]">{money(d.cost)}</td>
                       <td className="py-1.5 text-right text-[#059669]">{money(d.profit)}</td>
                       <td className="py-1.5 text-right text-[#5A7A95]">{d.predictedMonth}</td>
