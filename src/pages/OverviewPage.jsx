@@ -308,6 +308,127 @@ function BoardPlanDashboard({ boardPlan }) {
           })()}
         </section>
 
+        {/* Pipeline Forecast — This Month / This Quarter / Next Quarter */}
+        <section className={cardClass}>
+          <h2 className="text-lg font-bold text-white mb-1">Pipeline Forecast</h2>
+          <p className="text-xs text-[#5A7A95] mb-5">Deals in Negotiating &amp; Quoting stages by expected close period</p>
+          {(() => {
+            const now = new Date();
+            const currentMonth = now.getMonth(); // 0-indexed
+            const currentYear = now.getFullYear();
+            const currentQuarter = Math.floor(currentMonth / 3);
+
+            // Parse "Mon YYYY" label back to { month, year }
+            const parseLabel = (label) => {
+              if (!label) return null;
+              const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+              const parts = label.split(' ');
+              const mi = months.indexOf(parts[0]);
+              const yr = parseInt(parts[1]);
+              if (mi === -1 || isNaN(yr)) return null;
+              return { month: mi, year: yr };
+            };
+
+            const getPeriod = (label) => {
+              const parsed = parseLabel(label);
+              if (!parsed) return 'later';
+              const { month, year } = parsed;
+              if (year === currentYear && month === currentMonth) return 'thisMonth';
+              const dealQ = Math.floor(month / 3);
+              if (year === currentYear && dealQ === currentQuarter) return 'thisQuarter';
+              const nextQ = currentQuarter + 1;
+              if (nextQ <= 3 && year === currentYear && dealQ === nextQ) return 'nextQuarter';
+              if (nextQ > 3 && year === currentYear + 1 && dealQ === 0) return 'nextQuarter';
+              return 'later';
+            };
+
+            const pipelineDeals = [...negotiatingDeals, ...quotingDeals];
+            const thisMonth = pipelineDeals.filter(d => getPeriod(d.predictedMonth) === 'thisMonth');
+            const thisQuarter = pipelineDeals.filter(d => getPeriod(d.predictedMonth) === 'thisQuarter');
+            const nextQuarter = pipelineDeals.filter(d => getPeriod(d.predictedMonth) === 'nextQuarter');
+
+            // FY is Oct-Oct. Current FY starts Oct of previous year if we're before Oct, else Oct of current year
+            const fyStartYear = currentMonth >= 9 ? currentYear : currentYear - 1; // Oct = month 9
+            const fyStartMonth = 9; // October
+            const fyEndYear = fyStartYear + 1;
+            const fyEndMonth = 8; // September
+
+            const isInFY = (parsed) => {
+              if (!parsed) return false;
+              const { month, year } = parsed;
+              if (year === fyStartYear && month >= fyStartMonth) return true;
+              if (year === fyEndYear && month <= fyEndMonth) return true;
+              return false;
+            };
+
+            const isInCalendarYear = (parsed) => {
+              if (!parsed) return false;
+              return parsed.year === currentYear;
+            };
+
+            const thisFY = pipelineDeals.filter(d => isInFY(parseLabel(d.predictedMonth)));
+            const thisCalYear = pipelineDeals.filter(d => isInCalendarYear(parseLabel(d.predictedMonth)));
+
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const qLabel = (q, y) => `Q${q + 1} ${y}`;
+            const nextQ = currentQuarter + 1 > 3 ? 0 : currentQuarter + 1;
+            const nextQYear = currentQuarter + 1 > 3 ? currentYear + 1 : currentYear;
+
+            const DealRow = ({ d }) => (
+              <div className="flex items-center justify-between py-2 border-b border-[#2A4A6F]/40 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm font-medium truncate">{d.customer}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${d.stage === 'Negotiating' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#8b5cf6]/20 text-[#8b5cf6]'}`}>{d.stage}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${d.dealType === 'Recurring' ? 'bg-[#0EA5E9]/20 text-[#0EA5E9]' : 'bg-[#5A7A95]/20 text-[#5A7A95]'}`}>{d.dealType}</span>
+                  </div>
+                  <p className="text-xs text-[#5A7A95] truncate mt-0.5">{d.description}</p>
+                </div>
+                <div className="text-right ml-3 shrink-0">
+                  <p className="text-sm font-bold text-white">{money(d.revenue)}</p>
+                  <p className="text-[10px] text-[#5A7A95]">{d.owner} • GP: {money(d.profit)}</p>
+                </div>
+              </div>
+            );
+
+            const PeriodSection = ({ title, deals, subtitle }) => (
+              <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">{title}</h3>
+                    {subtitle && <p className="text-[10px] text-[#5A7A95]">{subtitle}</p>}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-[#5A7A95]">{deals.length} deal{deals.length !== 1 ? 's' : ''}</span>
+                    <p className="text-sm font-bold text-white">{money(deals.reduce((s, d) => s + d.revenue, 0))}</p>
+                  </div>
+                </div>
+                {deals.length > 0 ? (
+                  <div className="divide-y divide-[#2A4A6F]/40">
+                    {deals.sort((a, b) => b.revenue - a.revenue).map((d, i) => <DealRow key={d.id + i} d={d} />)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#5A7A95]">No deals expected this period</p>
+                )}
+              </div>
+            );
+
+            return (
+              <div className="space-y-4">
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <PeriodSection title="This Month" subtitle={`${monthNames[currentMonth]} ${currentYear}`} deals={thisMonth} />
+                  <PeriodSection title="This Quarter" subtitle={`${qLabel(currentQuarter, currentYear)} (excl. this month)`} deals={thisQuarter} />
+                  <PeriodSection title="Next Quarter" subtitle={qLabel(nextQ, nextQYear)} deals={nextQuarter} />
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <PeriodSection title="This Financial Year" subtitle={`Oct ${fyStartYear} – Sep ${fyEndYear}`} deals={thisFY} />
+                  <PeriodSection title="This Calendar Year" subtitle={`Jan – Dec ${currentYear}`} deals={thisCalYear} />
+                </div>
+              </div>
+            );
+          })()}
+        </section>
+
         {/* GP Split + Recurring GP vs Costs */}
         <section className="grid gap-6 xl:grid-cols-[1fr,2fr]">
           <div className={cardClass}>
