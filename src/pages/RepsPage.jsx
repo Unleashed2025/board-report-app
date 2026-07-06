@@ -1,6 +1,6 @@
 import { Bar } from 'react-chartjs-2';
 import Layout from '../components/Layout';
-import { reps } from '../data/salesData';
+import { useData } from '../data/DataContext.jsx';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
 const axisColor = '#5A7A95';
@@ -17,6 +17,8 @@ const chartOptions = {
 };
 
 export default function RepsPage() {
+  const { reps } = useData();
+
   return (
     <Layout>
     <div className="space-y-6 pb-6">

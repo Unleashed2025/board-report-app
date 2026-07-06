@@ -1,6 +1,6 @@
 import { Bar } from 'react-chartjs-2';
 import Layout from '../components/Layout';
-import { forecast } from '../data/salesData';
+import { useData } from '../data/DataContext.jsx';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
 const currency = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
@@ -8,6 +8,8 @@ const axisColor = '#5A7A95';
 const gridColor = 'rgba(90, 122, 149, 0.18)';
 
 export default function ForecastPage() {
+  const { forecast } = useData();
+
   return (
     <Layout>
     <div className="grid gap-6 pb-6 xl:grid-cols-[1.6fr,1fr]">

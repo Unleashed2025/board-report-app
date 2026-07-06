@@ -1,6 +1,6 @@
 import { Bar, Line } from 'react-chartjs-2';
 import Layout from '../components/Layout';
-import { monthlyForecast, pipelineByStage } from '../data/salesData';
+import { useData } from '../data/DataContext.jsx';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
 const axisColor = '#5A7A95';
@@ -16,6 +16,8 @@ const chartOptions = {
 };
 
 export default function PipelinePage() {
+  const { monthlyForecast, pipelineByStage } = useData();
+
   return (
     <Layout>
     <div className="grid gap-6 pb-6 xl:grid-cols-2">

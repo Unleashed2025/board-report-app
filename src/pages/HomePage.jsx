@@ -1,9 +1,15 @@
 import { Link } from 'react-router-dom';
-import { kpis } from '../data/salesData';
+import ExcelUpload from '../components/ExcelUpload';
+import { useData } from '../data/DataContext.jsx';
 
 const fmt = (n) => '£' + Number(n).toLocaleString('en-GB');
 
 export default function HomePage() {
+  const { dataLoaded, deals, kpis, lastUpdated, sourceFilename } = useData();
+  const uploadStamp = lastUpdated
+    ? lastUpdated.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+    : '';
+
   return (
     <div className="min-h-screen bg-[#0D2338]">
       {/* Header */}
@@ -28,6 +34,15 @@ export default function HomePage() {
         <p className="text-[#5A7A95] text-sm mb-12">
           Review your sales data with interactive dashboards covering pipeline health, deal stages, rep scorecards, and target progress.
         </p>
+
+        {dataLoaded && sourceFilename ? (
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#0EA5E9]/30 bg-[#0EA5E9]/10 px-4 py-2 text-xs text-[#BAE6FD]">
+            <span>📊</span>
+            <span>Using uploaded data from {sourceFilename} — {uploadStamp}</span>
+          </div>
+        ) : null}
+
+        <ExcelUpload />
 
         {/* Report Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -129,7 +144,7 @@ export default function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-white font-semibold text-sm">All Deals</h3>
-                  <p className="text-[#5A7A95] text-xs">Search and filter all 56 opportunities by stage, owner, type</p>
+                  <p className="text-[#5A7A95] text-xs">Search and filter all {deals.length} opportunities by stage, owner, type</p>
                 </div>
               </div>
               <p className="text-[#0EA5E9] text-xs font-semibold group-hover:underline">Browse Deals →</p>
@@ -141,7 +156,7 @@ export default function HomePage() {
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-[#1A334F]/50 border border-[#2A4A6F] rounded-lg p-6">
             <h3 className="text-white font-semibold text-sm mb-2">Live Data</h3>
-            <p className="text-[#5A7A95] text-xs">All metrics sourced from the master sales tracker workbook with real-time calculations.</p>
+            <p className="text-[#5A7A95] text-xs">Upload the latest sales tracker workbook to refresh every dashboard in one place.</p>
           </div>
           <div className="bg-[#1A334F]/50 border border-[#2A4A6F] rounded-lg p-6">
             <h3 className="text-white font-semibold text-sm mb-2">Interactive Charts</h3>

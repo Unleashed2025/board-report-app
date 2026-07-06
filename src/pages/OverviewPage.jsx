@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import Layout from '../components/Layout';
-import { kpis, monthlyForecast, pipelineByOwner, pipelineByServiceType, pipelineByStage } from '../data/salesData';
+import { useData } from '../data/DataContext.jsx';
+
+const PASS_HASH = '5a4b3c'; // simple check token
+const CORRECT_PASS = 'IamAseniorLeader!%!';
+const SESSION_KEY = 'overview_auth';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
 const chartColors = ['#0EA5E9', '#059669', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -25,6 +30,64 @@ const chartOptions = {
 const money = (value) => currency.format(value);
 
 export default function OverviewPage() {
+  const [authenticated, setAuthenticated] = useState(() => sessionStorage.getItem(SESSION_KEY) === 'true');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (password === CORRECT_PASS) {
+      sessionStorage.setItem(SESSION_KEY, 'true');
+      setAuthenticated(true);
+      setError('');
+    } else {
+      setError('Incorrect password');
+    }
+  };
+
+  if (!authenticated) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-8 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-lg bg-[#0EA5E9]/10 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#0EA5E9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">Senior Leadership Access</h2>
+                <p className="text-[#5A7A95] text-xs">This dashboard is restricted to senior leaders only.</p>
+              </div>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm text-[#5A7A95] mb-1">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-[#0D2338] border border-[#2A4A6F] text-white placeholder-[#5A7A95] focus:border-[#0EA5E9] focus:outline-none"
+                  placeholder="Enter password"
+                  autoFocus
+                />
+              </div>
+              {error && <p className="text-red-400 text-sm">{error}</p>}
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-lg bg-[#0EA5E9] text-white font-semibold hover:bg-[#0EA5E9]/90 transition-colors"
+              >
+                Access Dashboard
+              </button>
+            </form>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  const { kpis, monthlyForecast, pipelineByOwner, pipelineByServiceType, pipelineByStage } = useData();
   const kpiCards = [
     { label: 'Pipeline Revenue', value: money(kpis.openPipelineRevenue), accent: 'text-[#0EA5E9]' },
     { label: 'Pipeline GP', value: money(kpis.openPipelineGP), accent: 'text-white' },
