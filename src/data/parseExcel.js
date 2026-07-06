@@ -5,6 +5,229 @@ const TARGET_YEAR = 2026;
 const MANAGED_SUPPORT_WHITESPACE = 169120;
 export const stageList = ['Lead', 'To Be Contacted', 'Qualified', 'Quoting', 'Negotiating', 'Closed-Won', 'Closed-Lost'];
 
+// Excel serial date → "YYYY-MM" month label
+function serialToMonthLabel(serial) {
+  if (typeof serial !== 'number' || serial < 40000) return '';
+  const d = new Date((serial - 25569) * 86400 * 1000);
+  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+/**
+ * Detect and parse a Board Business Plan workbook.
+ * Returns null if the workbook isn't a business plan format.
+ */
+export function parseBoardPlan(workbook) {
+  // Find the best "figures" sheet - prefer sheets with "figures" in the name
+  const figuresSheet = workbook.SheetNames.find(n => /figures/i.test(n) && /new|july|latest/i.test(n))
+    || workbook.SheetNames.find(n => /figures/i.test(n))
+    || workbook.SheetNames.find(n => /business plan/i.test(n));
+
+  // Find matching tracker sheet
+  const trackerSheet = workbook.SheetNames.find(n => /tracker/i.test(n) && /new|july|latest/i.test(n))
+    || workbook.SheetNames.find(n => /tracker/i.test(n) && !/rollback/i.test(n));
+
+  if (!figuresSheet) return null;
+
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[figuresSheet], { header: 1, raw: true, defval: null });
+
+  // Validate structure: row 0 should mention "Business Plan"
+  const firstCell = String(rows[0]?.[0] || '');
+  if (!firstCell.includes('Business Plan') && !firstCell.includes('Clean 2026')) return null;
+
+  // Row 3 has month headers (Excel serial dates in cols 1-14, col 15 = "Total")
+  const monthRow = rows[3] || [];
+  const months = [];
+  for (let i = 1; i <= 14; i++) {
+    const val = monthRow[i];
+    if (typeof val === 'number' && val > 40000) {
+      months.push({ index: i, serial: val, label: serialToMonthLabel(val) });
+    }
+  }
+
+  if (months.length === 0) return null;
+
+  const toNum = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : 0;
+  const getRow = (rowIdx) => months.map(m => toNum((rows[rowIdx] || [])[m.index]));
+  const getTotal = (rowIdx) => toNum((rows[rowIdx] || [])[months.length + 1]);
+
+  // Parse GP data (rows 5-14)
+  const newRecurringGP = getRow(5);
+  const accumRecurringGP = getRow(6);
+  const consultancyGP = getRow(7);
+  const engineeringGP = getRow(8);
+  const managedSupportGP = getRow(9);
+  const licensingGP = getRow(10);
+  const hardwareGP = getRow(11);
+  const otherGP = getRow(12);
+  const totalNonRecurringGP = getRow(13);
+  const totalGP = getRow(14);
+
+  // Parse costs (rows 17-29)
+  const wages = getRow(17);
+  const ni = getRow(23);
+  const pensions = getRow(24);
+  const car = getRow(25);
+  const phones = getRow(26);
+  const insurance = getRow(27);
+  const marketing = getRow(28);
+  const totalCost = getRow(29);
+
+  // Parse outputs (rows 35-40)
+  const grossProfit = getRow(35);
+  const netProfit = getRow(37);
+  const ebitdaBeforeMDF = getRow(38);
+  const ebitdaAfterMDF = getRow(39);
+  const cumulativeEBITDA = getRow(40);
+
+  // MDF offset (row 32)
+  const mdfOffset = getRow(32);
+
+  // Totals
+  const totalGPTotal = getTotal(14);
+  const totalCostTotal = getTotal(29);
+  const totalRecurringGP = getTotal(6); // accumulative total
+  const totalNonRecurringGPTotal = getTotal(13);
+
+  // Compute closed GP split from accumulative recurring vs non-recurring
+  // The "Total" column for row 6 is sum of accumulative (in-year value), row 13 is NR total
+  const closedRecurringGP = totalRecurringGP;
+  const closedNonRecurringGP = totalNonRecurringGPTotal;
+  const closedTotalGP = totalGPTotal;
+
+  // Monthly data for charts
+  const monthlyData = months.map((m, i) => ({
+    month: m.label,
+    serial: m.serial,
+    recurringGP: accumRecurringGP[i],
+    newRecurringGP: newRecurringGP[i],
+    nonRecurringGP: totalNonRecurringGP[i],
+    totalGP: totalGP[i],
+    totalCost: totalCost[i],
+    netProfit: netProfit[i],
+    ebitda: ebitdaAfterMDF[i],
+    cumulativeEBITDA: cumulativeEBITDA[i],
+    wages: wages[i],
+    ni: ni[i],
+    pensions: pensions[i],
+    car: car[i],
+    phones: phones[i],
+    insurance: insurance[i],
+    marketing: marketing[i],
+    mdf: mdfOffset[i],
+    consultancyGP: consultancyGP[i],
+    engineeringGP: engineeringGP[i],
+    managedSupportGP: managedSupportGP[i],
+    licensingGP: licensingGP[i],
+    hardwareGP: hardwareGP[i],
+    otherGP: otherGP[i],
+  }));
+
+  // Cost breakdown totals
+  const costBreakdown = [
+    { name: 'Wages (gross)', value: getTotal(17) },
+    { name: 'National Insurance', value: getTotal(23) },
+    { name: 'Pensions', value: getTotal(24) },
+    { name: 'Car Allowance', value: getTotal(25) },
+    { name: 'Phones', value: getTotal(26) },
+    { name: 'Insurance', value: getTotal(27) },
+    { name: 'Marketing / SoPro', value: getTotal(28) },
+  ].filter(c => c.value > 0);
+
+  // GP breakdown by service type
+  const gpByServiceType = [
+    { name: 'Consultancy', value: getTotal(7) },
+    { name: 'Engineering', value: getTotal(8) },
+    { name: 'Managed Support', value: getTotal(9) },
+    { name: 'Licensing', value: getTotal(10) },
+    { name: 'Hardware', value: getTotal(11) },
+    { name: 'Other', value: getTotal(12) },
+  ].filter(s => s.value > 0);
+
+  // Parse tracker deals if available
+  let deals = [];
+  if (trackerSheet) {
+    const tRows = XLSX.utils.sheet_to_json(workbook.Sheets[trackerSheet], { header: 1, raw: true, defval: '' });
+    const tHeaders = tRows[3] || [];
+    const idCol = tHeaders.indexOf('Opportunity ID');
+    if (idCol !== -1) {
+      for (const row of tRows.slice(4)) {
+        const id = String(row[idCol] || '').trim();
+        if (!id || (!id.startsWith('OPP-') && id !== 'Totals')) continue;
+        if (id === 'Totals') break;
+        const predMonth = row[tHeaders.indexOf('Predicted Sales Month')];
+        deals.push({
+          id,
+          customer: String(row[tHeaders.indexOf('Customer')] || '').trim(),
+          owner: String(row[tHeaders.indexOf('Sales Owner')] || '').trim(),
+          stage: String(row[tHeaders.indexOf('Stage')] || '').trim(),
+          dealType: String(row[tHeaders.indexOf('Deal Type')] || '').trim(),
+          serviceType: String(row[tHeaders.indexOf('Service Type')] || '').trim(),
+          description: String(row[tHeaders.indexOf('Description')] || '').trim(),
+          revenue: toNum(row[tHeaders.indexOf('Revenue')]),
+          cost: toNum(row[tHeaders.indexOf('Cost')]),
+          profit: toNum(row[tHeaders.indexOf('Profit')]),
+          predictedMonth: typeof predMonth === 'number' && predMonth > 40000 ? serialToMonthLabel(predMonth) : '',
+        });
+      }
+    }
+  }
+
+  const closedWonDeals = deals.filter(d => d.stage === 'Closed-Won');
+  const negotiatingDeals = deals.filter(d => d.stage === 'Negotiating');
+  const quotingDeals = deals.filter(d => d.stage === 'Quoting');
+  const earlyStageDeals = deals.filter(d => ['Lead', 'To Be Contacted', 'Qualified'].includes(d.stage));
+  const boardDeals = [...closedWonDeals, ...negotiatingDeals];
+
+  // GP by rep (from tracker deals in forecast scope: Closed-Won + Negotiating)
+  const owners = [...new Set(boardDeals.map(d => d.owner).filter(Boolean))].sort();
+  const gpByRep = owners.map(owner => {
+    const repDeals = boardDeals.filter(d => d.owner === owner);
+    return {
+      owner,
+      dealCount: repDeals.length,
+      totalGP: repDeals.reduce((s, d) => s + d.profit, 0),
+      recurringGP: repDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0),
+      nonRecurringGP: repDeals.filter(d => d.dealType === 'Non-Recurring').reduce((s, d) => s + d.profit, 0),
+    };
+  });
+
+  // Significant deals (top 5 by profit)
+  const significantDeals = [...boardDeals].sort((a, b) => b.profit - a.profit).slice(0, 5);
+
+  // Extract the scenario name from row 4
+  const scenarioLabel = String(rows[4]?.[0] || '').replace(/^SALES FROM\s*/i, '').trim();
+
+  return {
+    isBoardPlan: true,
+    scenarioLabel,
+    figuresSheet,
+    trackerSheet,
+    monthlyData,
+    costBreakdown,
+    gpByServiceType,
+    gpByRep,
+    closedTotalGP,
+    closedRecurringGP,
+    closedNonRecurringGP,
+    totalCostTotal,
+    totalGPTotal,
+    ebitdaTotal: toNum((rows[39] || [])[months.length + 1]),
+    cumulativeEBITDAFinal: cumulativeEBITDA[cumulativeEBITDA.length - 1] || 0,
+    mdfTotal: getTotal(32),
+    deals,
+    closedWonDeals,
+    negotiatingDeals,
+    quotingDeals,
+    earlyStageDeals,
+    boardDeals,
+    significantDeals,
+    closedWonCount: closedWonDeals.length,
+    negotiatingCount: negotiatingDeals.length,
+    quotingCount: quotingDeals.length,
+    earlyStageCount: earlyStageDeals.length,
+  };
+}
+
 const openStages = stageList.filter((stage) => !['Closed-Won', 'Closed-Lost'].includes(stage));
 const unique = (values) => [...new Set(values.filter(Boolean))];
 const sum = (items, selector) =>
@@ -230,11 +453,31 @@ export function buildSalesData(deals) {
 }
 
 export default function parseExcel(workbook) {
-  const sheet = workbook.Sheets['Sales Tracker'];
+  // Try Board Business Plan format first
+  const boardPlan = parseBoardPlan(workbook);
+  if (boardPlan) {
+    // Also build sales data from the tracker if available
+    const trackerSheet = boardPlan.trackerSheet;
+    let salesData = null;
+    if (trackerSheet && workbook.Sheets[trackerSheet]) {
+      try {
+        salesData = parseTrackerSheet(workbook.Sheets[trackerSheet]);
+      } catch (e) { /* ignore - tracker parsing is optional */ }
+    }
+    return { ...salesData, boardPlan };
+  }
+
+  // Also check if Sales Tracker exists in this workbook (original format)
+  const sheet = workbook.Sheets['Sales Tracker'] || workbook.Sheets['new june tracker'] || workbook.Sheets['July Tracker'];
 
   if (!sheet) {
-    throw new Error('Sheet "Sales Tracker" not found.');
+    throw new Error('No recognised sheet found. Upload a Sales Dashboard or Board Business Plan workbook.');
   }
+
+  return { ...parseTrackerSheet(sheet), boardPlan: null };
+}
+
+function parseTrackerSheet(sheet) {
 
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
   const headers = rows[3] || [];
