@@ -105,6 +105,7 @@ export default function OverviewPage() {
 }
 
 function BoardPlanDashboard({ boardPlan }) {
+  const [activeTab, setActiveTab] = useState('pipeline');
   const {
     monthlyData, costBreakdown, gpByServiceType, gpByRep, employeeCosts,
     closedTotalGP, closedRecurringGP, closedNonRecurringGP,
@@ -135,9 +136,172 @@ function BoardPlanDashboard({ boardPlan }) {
     (d.dealType !== 'Recurring' && d.revenue >= 7500)
   ).sort((a, b) => b.revenue - a.revenue);
 
+  // Closed Won report view
+  if (activeTab === 'closedwon') {
+    return (
+      <Layout>
+        <div className="space-y-6 pb-6">
+          {/* Tab bar */}
+          <div className="flex gap-2">
+            <button onClick={() => setActiveTab('pipeline')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Pipeline &amp; Forecast</button>
+            <button className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0EA5E9] text-white">Closed Won Report</button>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Closed Won Report</h1>
+              <p className="text-sm text-[#5A7A95] mt-1">{closedWonCount} deals closed — Revenue &amp; GP breakdown</p>
+            </div>
+          </div>
+
+          {/* Closed Won KPIs */}
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KPICard label="Total Closed Revenue" value={money(closedWonDeals.reduce((s, d) => s + d.revenue, 0))} accent="text-white" icon="£" />
+            <KPICard label="Total Closed GP" value={money(closedWonDeals.reduce((s, d) => s + d.profit, 0))} accent="text-[#059669]" icon="£" />
+            <KPICard label="Monthly Recurring Revenue" value={money(currentMonthlyRecurringRevenue)} accent="text-[#0EA5E9]" icon="↻" subtitle={`${cwRecurring.length} recurring deals`} />
+            <KPICard label="Non-Recurring Revenue" value={money(currentNonRecurringRevenue)} accent="text-[#f59e0b]" icon="→" subtitle={`${cwNonRecurring.length} project deals`} />
+          </section>
+
+          {/* Closed Won by Rep */}
+          <section className={cardClass}>
+            <h2 className="text-lg font-bold text-white mb-4">Closed Won by Sales Rep</h2>
+            {(() => {
+              const owners = [...new Set(closedWonDeals.map(d => d.owner).filter(Boolean))].sort();
+              return (
+                <div className="space-y-4">
+                  {owners.map(owner => {
+                    const deals = closedWonDeals.filter(d => d.owner === owner);
+                    const totalRev = deals.reduce((s, d) => s + d.revenue, 0);
+                    const totalGP = deals.reduce((s, d) => s + d.profit, 0);
+                    return (
+                      <div key={owner}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-white font-medium">{owner}</span>
+                          <span className="text-sm text-[#5A7A95]">{deals.length} deals • Rev: {money(totalRev)} • GP: {money(totalGP)}</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                              <th className="text-left py-1.5">Customer</th>
+                              <th className="text-left py-1.5">Description</th>
+                              <th className="text-left py-1.5">Type</th>
+                              <th className="text-left py-1.5">Service</th>
+                              <th className="text-right py-1.5">Revenue</th>
+                              <th className="text-right py-1.5">GP</th>
+                              <th className="text-right py-1.5">Month</th>
+                            </tr></thead>
+                            <tbody>
+                              {deals.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
+                                <tr key={d.id + i} className="border-b border-[#2A4A6F]/30 text-white">
+                                  <td className="py-1.5 pr-2 font-medium">{d.customer}</td>
+                                  <td className="py-1.5 pr-2 text-[#5A7A95] truncate max-w-[200px]">{d.description}</td>
+                                  <td className="py-1.5 pr-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${d.dealType === 'Recurring' ? 'bg-[#0EA5E9]/20 text-[#0EA5E9]' : 'bg-[#f59e0b]/20 text-[#f59e0b]'}`}>{d.dealType}</span></td>
+                                  <td className="py-1.5 pr-2 text-[#5A7A95]">{d.serviceType}</td>
+                                  <td className="py-1.5 text-right font-medium">{money(d.revenue)}</td>
+                                  <td className="py-1.5 text-right text-[#059669]">{money(d.profit)}</td>
+                                  <td className="py-1.5 text-right text-[#5A7A95]">{d.predictedMonth}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </section>
+
+          {/* Closed Won by Service Type */}
+          <section className="grid gap-6 xl:grid-cols-2">
+            <div className={cardClass}>
+              <h2 className="text-lg font-bold text-white mb-4">By Deal Type</h2>
+              <div className="h-56">
+                <Doughnut
+                  data={{
+                    labels: ['Recurring', 'Non-Recurring'],
+                    datasets: [{
+                      data: [cwRecurring.reduce((s, d) => s + d.revenue, 0), cwNonRecurring.reduce((s, d) => s + d.revenue, 0)],
+                      backgroundColor: ['#0EA5E9', '#f59e0b'],
+                      borderColor: '#1A334F',
+                      borderWidth: 3,
+                    }],
+                  }}
+                  options={{ responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#E2E8F0' } } } }}
+                />
+              </div>
+            </div>
+            <div className={cardClass}>
+              <h2 className="text-lg font-bold text-white mb-4">By Service Type</h2>
+              {(() => {
+                const types = [...new Set(closedWonDeals.map(d => d.serviceType).filter(Boolean))];
+                return (
+                  <div className="space-y-2">
+                    {types.map(type => {
+                      const rev = closedWonDeals.filter(d => d.serviceType === type).reduce((s, d) => s + d.revenue, 0);
+                      const gp = closedWonDeals.filter(d => d.serviceType === type).reduce((s, d) => s + d.profit, 0);
+                      return (
+                        <div key={type} className="flex items-center justify-between text-sm">
+                          <span className="text-[#5A7A95]">{type}</span>
+                          <span className="text-white font-medium">Rev: {money(rev)} • GP: {money(gp)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+
+          {/* Full Closed Won Deal List */}
+          <section className={cardClass}>
+            <h2 className="text-lg font-bold text-white mb-4">All Closed Won Deals</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                  <th className="text-left py-2">Customer</th>
+                  <th className="text-left py-2">Rep</th>
+                  <th className="text-left py-2">Description</th>
+                  <th className="text-left py-2">Type</th>
+                  <th className="text-left py-2">Service</th>
+                  <th className="text-right py-2">Revenue</th>
+                  <th className="text-right py-2">Cost</th>
+                  <th className="text-right py-2">GP</th>
+                  <th className="text-right py-2">Month</th>
+                </tr></thead>
+                <tbody>
+                  {closedWonDeals.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
+                    <tr key={d.id + i} className="border-b border-[#2A4A6F]/30 text-white">
+                      <td className="py-1.5 pr-2 font-medium">{d.customer}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95]">{d.owner}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95] truncate max-w-[180px]">{d.description}</td>
+                      <td className="py-1.5 pr-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${d.dealType === 'Recurring' ? 'bg-[#0EA5E9]/20 text-[#0EA5E9]' : 'bg-[#f59e0b]/20 text-[#f59e0b]'}`}>{d.dealType}</span></td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95]">{d.serviceType}</td>
+                      <td className="py-1.5 text-right">{money(d.revenue)}</td>
+                      <td className="py-1.5 text-right text-[#ef4444]">{money(d.cost)}</td>
+                      <td className="py-1.5 text-right text-[#059669]">{money(d.profit)}</td>
+                      <td className="py-1.5 text-right text-[#5A7A95]">{d.predictedMonth}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="space-y-6 pb-6">
+        {/* Tab bar */}
+        <div className="flex gap-2">
+          <button className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0EA5E9] text-white">Pipeline &amp; Forecast</button>
+          <button onClick={() => setActiveTab('closedwon')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Closed Won Report</button>
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
@@ -304,6 +468,127 @@ function BoardPlanDashboard({ boardPlan }) {
                   ))}
                 </div>
               </>
+            );
+          })()}
+        </section>
+
+        {/* Pipeline Forecast — This Month / This Quarter / Next Quarter */}
+        <section className={cardClass}>
+          <h2 className="text-lg font-bold text-white mb-1">Pipeline Forecast</h2>
+          <p className="text-xs text-[#5A7A95] mb-5">Deals in Negotiating &amp; Quoting stages by expected close period</p>
+          {(() => {
+            const now = new Date();
+            const currentMonth = now.getMonth(); // 0-indexed
+            const currentYear = now.getFullYear();
+            const currentQuarter = Math.floor(currentMonth / 3);
+
+            // Parse "Mon YYYY" label back to { month, year }
+            const parseLabel = (label) => {
+              if (!label) return null;
+              const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+              const parts = label.split(' ');
+              const mi = months.indexOf(parts[0]);
+              const yr = parseInt(parts[1]);
+              if (mi === -1 || isNaN(yr)) return null;
+              return { month: mi, year: yr };
+            };
+
+            const getPeriod = (label) => {
+              const parsed = parseLabel(label);
+              if (!parsed) return 'later';
+              const { month, year } = parsed;
+              if (year === currentYear && month === currentMonth) return 'thisMonth';
+              const dealQ = Math.floor(month / 3);
+              if (year === currentYear && dealQ === currentQuarter) return 'thisQuarter';
+              const nextQ = currentQuarter + 1;
+              if (nextQ <= 3 && year === currentYear && dealQ === nextQ) return 'nextQuarter';
+              if (nextQ > 3 && year === currentYear + 1 && dealQ === 0) return 'nextQuarter';
+              return 'later';
+            };
+
+            const pipelineDeals = [...negotiatingDeals, ...quotingDeals];
+            const thisMonth = pipelineDeals.filter(d => getPeriod(d.predictedMonth) === 'thisMonth');
+            const thisQuarter = pipelineDeals.filter(d => getPeriod(d.predictedMonth) === 'thisQuarter');
+            const nextQuarter = pipelineDeals.filter(d => getPeriod(d.predictedMonth) === 'nextQuarter');
+
+            // FY is Oct-Oct. Current FY starts Oct of previous year if we're before Oct, else Oct of current year
+            const fyStartYear = currentMonth >= 9 ? currentYear : currentYear - 1; // Oct = month 9
+            const fyStartMonth = 9; // October
+            const fyEndYear = fyStartYear + 1;
+            const fyEndMonth = 8; // September
+
+            const isInFY = (parsed) => {
+              if (!parsed) return false;
+              const { month, year } = parsed;
+              if (year === fyStartYear && month >= fyStartMonth) return true;
+              if (year === fyEndYear && month <= fyEndMonth) return true;
+              return false;
+            };
+
+            const isInCalendarYear = (parsed) => {
+              if (!parsed) return false;
+              return parsed.year === currentYear;
+            };
+
+            const thisFY = pipelineDeals.filter(d => isInFY(parseLabel(d.predictedMonth)));
+            const thisCalYear = pipelineDeals.filter(d => isInCalendarYear(parseLabel(d.predictedMonth)));
+
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const qLabel = (q, y) => `Q${q + 1} ${y}`;
+            const nextQ = currentQuarter + 1 > 3 ? 0 : currentQuarter + 1;
+            const nextQYear = currentQuarter + 1 > 3 ? currentYear + 1 : currentYear;
+
+            const DealRow = ({ d }) => (
+              <div className="flex items-center justify-between py-2 border-b border-[#2A4A6F]/40 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm font-medium truncate">{d.customer}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${d.stage === 'Negotiating' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#8b5cf6]/20 text-[#8b5cf6]'}`}>{d.stage}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${d.dealType === 'Recurring' ? 'bg-[#0EA5E9]/20 text-[#0EA5E9]' : 'bg-[#5A7A95]/20 text-[#5A7A95]'}`}>{d.dealType}</span>
+                  </div>
+                  <p className="text-xs text-[#5A7A95] truncate mt-0.5">{d.description}</p>
+                </div>
+                <div className="text-right ml-3 shrink-0">
+                  <p className="text-sm font-bold text-white">{money(d.revenue)}</p>
+                  <p className="text-[10px] text-[#5A7A95]">{d.owner} • GP: {money(d.profit)}</p>
+                </div>
+              </div>
+            );
+
+            const PeriodSection = ({ title, deals, subtitle }) => (
+              <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">{title}</h3>
+                    {subtitle && <p className="text-[10px] text-[#5A7A95]">{subtitle}</p>}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-[#5A7A95]">{deals.length} deal{deals.length !== 1 ? 's' : ''}</span>
+                    <p className="text-sm font-bold text-white">{money(deals.reduce((s, d) => s + d.revenue, 0))}</p>
+                  </div>
+                </div>
+                {deals.length > 0 ? (
+                  <div className="divide-y divide-[#2A4A6F]/40">
+                    {deals.sort((a, b) => b.revenue - a.revenue).map((d, i) => <DealRow key={d.id + i} d={d} />)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#5A7A95]">No deals expected this period</p>
+                )}
+              </div>
+            );
+
+            return (
+              <div className="space-y-4">
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <PeriodSection title="This Month" subtitle={`${monthNames[currentMonth]} ${currentYear}`} deals={thisMonth} />
+                  <PeriodSection title="This Quarter" subtitle={`${qLabel(currentQuarter, currentYear)} (excl. this month)`} deals={thisQuarter} />
+                  <PeriodSection title="Next Quarter" subtitle={qLabel(nextQ, nextQYear)} deals={nextQuarter} />
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <PeriodSection title="This Financial Year" subtitle={`Oct ${fyStartYear} – Sep ${fyEndYear}`} deals={thisFY} />
+                  <PeriodSection title="This Calendar Year" subtitle={`Jan – Dec ${currentYear}`} deals={thisCalYear} />
+                </div>
+              </div>
             );
           })()}
         </section>
