@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import Layout from '../components/Layout';
 import { useData } from '../data/DataContext.jsx';
 
 const cardClass = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-6';
@@ -15,11 +15,17 @@ export default function PipelinePage() {
 
   if (!dataLoaded || !deals || deals.length === 0) {
     return (
-      <Layout>
-        <div className={cardClass}>
-          <p className="text-[#5A7A95]">Upload a <strong className="text-white">Sales Tracker</strong> workbook from the home page to view your pipeline.</p>
-        </div>
-      </Layout>
+      <div className="min-h-screen bg-[#0D2338] text-white">
+        <header className="border-b border-[#1A334F] px-6 py-4 flex items-center gap-4">
+          <Link to="/" className="text-[#5A7A95] hover:text-white text-xs font-medium">← Home</Link>
+          <h1 className="text-lg font-bold text-white">Pipeline Analysis</h1>
+        </header>
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <div className={cardClass}>
+            <p className="text-[#5A7A95]">Upload a <strong className="text-white">Sales Tracker</strong> workbook from the home page to view your pipeline.</p>
+          </div>
+        </main>
+      </div>
     );
   }
 
@@ -86,7 +92,12 @@ export default function PipelinePage() {
   };
 
   return (
-    <Layout>
+    <div className="min-h-screen bg-[#0D2338] text-white">
+      <header className="border-b border-[#1A334F] px-6 py-4 flex items-center gap-4">
+        <Link to="/" className="text-[#5A7A95] hover:text-white text-xs font-medium">← Home</Link>
+        <h1 className="text-lg font-bold text-white">Pipeline Analysis</h1>
+      </header>
+      <main className="max-w-7xl mx-auto px-6 py-8">
       <div className="space-y-6 pb-6">
         {/* Rep selector */}
         <div className="flex items-center gap-4 flex-wrap">
@@ -273,6 +284,7 @@ export default function PipelinePage() {
           <DealSection title="Early Stage (Lead / Qualified)" deals={earlyStage} color="text-[#5A7A95]" />
         </section>
       </div>
-    </Layout>
+      </main>
+    </div>
   );
 }
