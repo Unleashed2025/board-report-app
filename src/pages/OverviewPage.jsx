@@ -146,7 +146,8 @@ function BoardPlanDashboard({ boardPlan }) {
   const {
     monthlyData, costBreakdown, gpByServiceType, gpByRep, employeeCosts,
     closedTotalGP, closedRecurringGP, closedNonRecurringGP,
-    totalCostTotal, ebitdaTotal, cumulativeEBITDAFinal,
+    totalCostTotal, totalGPTotal, grossProfitTotal, netProfitTotal,
+    ebitdaTotal, cumulativeEBITDAFinal, mdfTotal,
     closedWonDeals, negotiatingDeals, quotingDeals, earlyStageDeals,
     significantDeals, scenarioLabel,
     closedWonCount, negotiatingCount, quotingCount, earlyStageCount,
@@ -846,6 +847,204 @@ function BoardPlanDashboard({ boardPlan }) {
             </div>
           )}
         </div>
+
+        {/* Year-End Forecast Summary — from Figures tab */}
+        {(() => {
+          // CW Only scenario — computed from deal-level data using R78
+          const cwOnlyRecGP = cwRecWithR78Cal.reduce((s, d) => s + d.r78.resultGP, 0);
+          const cwOnlyNRGP = cwNonRecurring.reduce((s, d) => s + d.profit, 0);
+          const cwOnlyTotalGP = cwOnlyRecGP + cwOnlyNRGP;
+          const cwOnlyGrossProfit = cwOnlyTotalGP - totalCostTotal;
+          const cwOnlyNetProfit = cwOnlyGrossProfit + (mdfTotal || 0);
+
+          // Negotiating pipeline addition
+          const negRecGP = negRecWithR78Cal.reduce((s, d) => s + d.r78.resultGP, 0);
+          const negNRGP = negotiatingDeals.filter(d => d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+          const negTotalGP = negRecGP + negNRGP;
+
+          // Full forecast (CW + Negotiating) — from figures tab
+          const fullTotalGP = totalGPTotal;
+          const fullGrossProfit = grossProfitTotal;
+          const fullNetProfit = netProfitTotal;
+
+          const ScenarioCard = ({ label, borderColor, bgColor, textColor, gp, cost, gross, net }) => (
+            <div className={`rounded-xl border-2 ${borderColor} ${bgColor} p-5`}>
+              <p className={`text-sm font-bold ${textColor} mb-3`}>{label}</p>
+              <div className="space-y-2">
+                <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Total GP</span><span className="text-sm font-bold text-[#0EA5E9]">{money(gp)}</span></div>
+                <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Total Costs</span><span className="text-sm font-bold text-[#ef4444]">{money(cost)}</span></div>
+                <div className="border-t border-[#2A4A6F] pt-2 flex justify-between"><span className="text-xs text-[#A0B4C8]">Gross Profit</span><span className={`text-sm font-bold ${gross >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(gross)}</span></div>
+                <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Net Profit / EBITDA</span><span className={`text-sm font-bold ${net >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(net)}</span></div>
+              </div>
+            </div>
+          );
+
+          return (
+        <section className={`${cardClass} report-page`}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-bold text-white">Year-End Forecast Summary</h2>
+              <p className="text-xs text-[#5A7A95]">Two scenarios: confirmed Closed/Won position vs full forecast including Negotiating deals</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-[#5A7A95]">Forecast EBITDA (Full)</p>
+              <p className={`text-2xl font-bold ${ebitdaTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(ebitdaTotal)}</p>
+            </div>
+          </div>
+
+          <div className={`rounded-lg bg-[#0D2338] border border-[#2A4A6F] p-3 mb-4`}>
+            <p className="text-xs text-[#A0B4C8] leading-relaxed">
+              <span className="font-semibold text-white">How this works:</span>{' '}
+              <strong className="text-[#059669]">Closed/Won Only</strong> shows where we finish the year based solely on confirmed deals — recurring GP is weighted using Rule of 78 based on billing start dates, plus all non-recurring GP from closed projects.
+              <strong className="text-[#0EA5E9]"> Full Forecast (CW + Negotiating)</strong> adds deals still in negotiation, matching the Business Plan figures sheet — this is the target position if all pipeline deals land.
+              Costs (wages, NI, pensions, overheads) are fixed from the figures sheet and apply to both scenarios.
+              The gap between the two scenarios shows the GP still at risk in the pipeline.
+            </p>
+          </div>
+
+          {/* Side-by-side scenario cards */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 mb-4">
+            <ScenarioCard
+              label="✅ Closed/Won Only (Confirmed)"
+              borderColor="border-[#059669]" bgColor="bg-[#059669]/5" textColor="text-[#059669]"
+              gp={cwOnlyTotalGP} cost={totalCostTotal} gross={cwOnlyGrossProfit} net={cwOnlyNetProfit}
+            />
+            <ScenarioCard
+              label="📊 Full Forecast (CW + Negotiating)"
+              borderColor="border-[#0EA5E9]" bgColor="bg-[#0EA5E9]/5" textColor="text-[#0EA5E9]"
+              gp={fullTotalGP} cost={totalCostTotal} gross={fullGrossProfit} net={fullNetProfit}
+            />
+            <div className="rounded-xl border-2 border-[#f59e0b] bg-[#f59e0b]/5 p-5">
+              <p className="text-sm font-bold text-[#f59e0b] mb-3">⚠️ Pipeline Gap (At Risk)</p>
+              <div className="space-y-2">
+                <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Negotiating GP</span><span className="text-sm font-bold text-[#f59e0b]">{money(negTotalGP)}</span></div>
+                <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Recurring (R78)</span><span className="text-sm font-bold text-[#0EA5E9]">{money(negRecGP)}</span></div>
+                <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Non-Recurring</span><span className="text-sm font-bold text-[#f59e0b]">{money(negNRGP)}</span></div>
+                <div className="border-t border-[#2A4A6F] pt-2 flex justify-between"><span className="text-xs text-[#A0B4C8]">Deals in Negotiation</span><span className="text-sm font-bold text-white">{negotiatingCount}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* GP breakdown detail */}
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-xs">
+              <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                <th className="text-left py-2">Metric</th>
+                <th className="text-right py-2">Closed/Won Only</th>
+                <th className="text-right py-2">+ Negotiating</th>
+                <th className="text-right py-2">Full Forecast</th>
+              </tr></thead>
+              <tbody>
+                <tr className="border-b border-[#2A4A6F]/30 text-white">
+                  <td className="py-1.5">Recurring GP (R78 weighted)</td>
+                  <td className="py-1.5 text-right text-[#059669] font-medium">{money(cwOnlyRecGP)}</td>
+                  <td className="py-1.5 text-right text-[#f59e0b]">+{money(negRecGP)}</td>
+                  <td className="py-1.5 text-right text-[#0EA5E9] font-medium">{money(cwOnlyRecGP + negRecGP)}</td>
+                </tr>
+                <tr className="border-b border-[#2A4A6F]/30 text-white">
+                  <td className="py-1.5">Non-Recurring GP</td>
+                  <td className="py-1.5 text-right text-[#059669] font-medium">{money(cwOnlyNRGP)}</td>
+                  <td className="py-1.5 text-right text-[#f59e0b]">+{money(negNRGP)}</td>
+                  <td className="py-1.5 text-right text-[#0EA5E9] font-medium">{money(cwOnlyNRGP + negNRGP)}</td>
+                </tr>
+                <tr className="border-b border-[#2A4A6F]/30 text-white font-bold">
+                  <td className="py-1.5">Total GP</td>
+                  <td className="py-1.5 text-right text-[#059669]">{money(cwOnlyTotalGP)}</td>
+                  <td className="py-1.5 text-right text-[#f59e0b]">+{money(negTotalGP)}</td>
+                  <td className="py-1.5 text-right text-[#0EA5E9]">{money(fullTotalGP)}</td>
+                </tr>
+                <tr className="border-b border-[#2A4A6F]/30 text-white">
+                  <td className="py-1.5">Total Costs</td>
+                  <td className="py-1.5 text-right text-[#ef4444]">{money(totalCostTotal)}</td>
+                  <td className="py-1.5 text-right text-[#5A7A95]">—</td>
+                  <td className="py-1.5 text-right text-[#ef4444]">{money(totalCostTotal)}</td>
+                </tr>
+                <tr className="border-t-2 border-[#0EA5E9] text-white font-bold">
+                  <td className="py-2">Gross Profit</td>
+                  <td className={`py-2 text-right ${cwOnlyGrossProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(cwOnlyGrossProfit)}</td>
+                  <td className="py-2 text-right text-[#f59e0b]">+{money(negTotalGP)}</td>
+                  <td className={`py-2 text-right ${fullGrossProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(fullGrossProfit)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Deal pipeline status */}
+          <div className="border-t border-[#2A4A6F] pt-4">
+            <h3 className="text-sm font-bold text-white mb-3">Deal Pipeline Status</h3>
+            <p className="text-xs text-[#A0B4C8] mb-3">
+              {closedWonCount} deals are confirmed Closed/Won, {negotiatingCount} are in negotiation. The gap between confirmed and full forecast is {money(negTotalGP)} GP still at risk.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-[#059669]/30 bg-[#059669]/5 p-3">
+                <p className="text-[10px] text-[#059669] font-semibold uppercase tracking-wide">Closed / Won</p>
+                <p className="text-lg font-bold text-white mt-1">{closedWonCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(closedWonDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+              <div className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-3">
+                <p className="text-[10px] text-[#f59e0b] font-semibold uppercase tracking-wide">Negotiating</p>
+                <p className="text-lg font-bold text-white mt-1">{negotiatingCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(negotiatingDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+              <div className="rounded-lg border border-[#8b5cf6]/30 bg-[#8b5cf6]/5 p-3">
+                <p className="text-[10px] text-[#8b5cf6] font-semibold uppercase tracking-wide">Quoting</p>
+                <p className="text-lg font-bold text-white mt-1">{quotingCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(quotingDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+              <div className="rounded-lg border border-[#5A7A95]/30 bg-[#5A7A95]/5 p-3">
+                <p className="text-[10px] text-[#5A7A95] font-semibold uppercase tracking-wide">Early Stage</p>
+                <p className="text-lg font-bold text-white mt-1">{earlyStageCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(earlyStageDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly P&L table */}
+          <div className="border-t border-[#2A4A6F] pt-4 mt-4">
+            <h3 className="text-sm font-bold text-white mb-3">Monthly P&amp;L Forecast (Full — from Figures Sheet)</h3>
+            <p className="text-xs text-[#A0B4C8] mb-3">Month-by-month breakdown from the Business Plan figures sheet showing how GP, costs and EBITDA build through the year. These figures include both CW and Negotiating deals as modelled in the spreadsheet.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[10px]">
+                <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                  <th className="text-left py-1.5 sticky left-0 bg-[#1A334F] min-w-[70px]">Month</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Recurring GP</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Non-Rec GP</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Total GP</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Total Cost</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Net Profit</th>
+                  <th className="text-right py-1.5 min-w-[65px]">EBITDA</th>
+                  <th className="text-right py-1.5 min-w-[75px]">Cumulative</th>
+                </tr></thead>
+                <tbody>
+                  {monthlyData.map((m, i) => (
+                    <tr key={i} className="border-b border-[#2A4A6F]/20 text-white">
+                      <td className="py-1 sticky left-0 bg-[#1A334F] font-medium">{m.month}</td>
+                      <td className="py-1 text-right text-[#0EA5E9]">{money(m.recurringGP)}</td>
+                      <td className="py-1 text-right text-[#f59e0b]">{money(m.nonRecurringGP)}</td>
+                      <td className="py-1 text-right font-medium">{money(m.totalGP)}</td>
+                      <td className="py-1 text-right text-[#ef4444]">{money(m.totalCost)}</td>
+                      <td className={`py-1 text-right ${m.netProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(m.netProfit)}</td>
+                      <td className={`py-1 text-right ${m.ebitda >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(m.ebitda)}</td>
+                      <td className={`py-1 text-right font-bold ${m.cumulativeEBITDA >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(m.cumulativeEBITDA)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-[#0EA5E9] text-white font-bold">
+                    <td className="py-2 sticky left-0 bg-[#1A334F]">Year Total</td>
+                    <td className="py-2 text-right text-[#0EA5E9]">{money(closedRecurringGP)}</td>
+                    <td className="py-2 text-right text-[#f59e0b]">{money(closedNonRecurringGP)}</td>
+                    <td className="py-2 text-right">{money(totalGPTotal)}</td>
+                    <td className="py-2 text-right text-[#ef4444]">{money(totalCostTotal)}</td>
+                    <td className={`py-2 text-right ${netProfitTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(netProfitTotal)}</td>
+                    <td className={`py-2 text-right ${ebitdaTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(ebitdaTotal)}</td>
+                    <td className={`py-2 text-right ${cumulativeEBITDAFinal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(cumulativeEBITDAFinal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+          );
+        })()}
 
         {/* KPI Cards */}
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
