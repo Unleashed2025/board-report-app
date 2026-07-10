@@ -178,6 +178,8 @@ export function parseBoardPlan(workbook) {
         const billStart = row[tHeaders.indexOf('Predicted Billing Start Date')];
         const parsedPredMonth = typeof predMonth === 'number' && predMonth > 40000 ? serialToMonthLabel(predMonth) : '';
         const parsedBillStart = typeof billStart === 'number' && billStart > 40000 ? serialToMonthLabel(billStart) : '';
+        const deliveryDaysCol = tHeaders.indexOf('Delivery Days');
+        const deliveryDaysVal = deliveryDaysCol !== -1 ? toNum(row[deliveryDaysCol]) : 0;
         deals.push({
           id,
           customer: String(row[tHeaders.indexOf('Customer')] || '').trim(),
@@ -190,7 +192,8 @@ export function parseBoardPlan(workbook) {
           cost: toNum(row[tHeaders.indexOf('Cost')]),
           profit: toNum(row[tHeaders.indexOf('Profit')]),
           predictedMonth: parsedPredMonth,
-          billingStart: parsedBillStart || parsedPredMonth, // fall back to predicted month
+          billingStart: parsedBillStart || parsedPredMonth,
+          deliveryDays: deliveryDaysVal, // 0 if column not present yet
         });
       }
     }
