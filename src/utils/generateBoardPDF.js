@@ -163,42 +163,114 @@ function analyseData(boardPlan, r78Data) {
   const domPct = totalSvcGP > 0 && domSvc ? domSvc.value / totalSvcGP : 0;
 
   // ── Narratives ──
-  // Use R78-weighted annual GP figures (not raw monthly sums which are misleading)
+  // Use the SAME figures as the dashboard — R78-weighted annual GP
   const cwOnlyTotalGP = r78Data?.cwOnlyTotalGP || 0;
   const cwOnlyRecGP = r78Data?.cwOnlyRecGP || 0;
   const cwOnlyNRGP = r78Data?.cwOnlyNRGP || 0;
-  const cwRecMonthly = closedWonDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
-  const cwNRTotal = closedWonDeals.filter(d => d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+  const cwOnlyGross = cwOnlyTotalGP - totalCostTotal;
+  const gap = cwOnlyGross < 0 ? Math.abs(cwOnlyGross) : 0;
+
+  // ── Delivery duration: use spreadsheet column if available, else only flag known risky types ──
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const parseMonth = (m) => {
+    if (!m) return null;
+    const parts = String(m).split(' ');
+    const mi = MONTH_NAMES.findIndex(n => parts[0]?.startsWith(n));
+    const yr = parseInt(parts[1] || parts[0], 10);
+    if (mi === -1) return null;
+    return { month: mi, year: yr > 100 ? yr : 2000 + yr };
+  };
+  const addDays = (parsed, days) => {
+    if (!parsed) return null;
+    const d = new Date(parsed.year, parsed.month, 15);
+    d.setDate(d.getDate() + days);
+    return { month: d.getMonth(), year: d.getFullYear() };
+  };
+  const fmtMonth = (p) => p ? `${MONTH_NAMES[p.month]} ${p.year}` : 'TBC';
+  const isBeforeDec = (p) => p && (p.year < 2026 || (p.year === 2026 && p.month <= 11));
+
+  // Only estimate delivery for known high-risk deal types; use spreadsheet value if provided
+  const getDeliveryDays = (d) => {
+    if (d.deliveryDays && d.deliveryDays > 0) return d.deliveryDays; // from spreadsheet
+    const desc = (d.description || '').toLowerCase();
+    if (desc.includes('vcto') || desc.includes('audit') || desc.includes('vct')) return 120;
+    if (desc.includes('migrat')) return 60;
+    return 0; // unknown — don't guess
+  };
 
   const theGood = [], theBad = [], trends = [];
 
-  if (closedWonDeals.length > 0) {
-    // Show R78-weighted year contribution, not raw monthly sum
-    if (cwOnlyTotalGP > 0) {
-      theGood.push(`${closedWonDeals.length} deals closed and won. R78-weighted year contribution: ${money(cwOnlyTotalGP)} GP (${money(cwOnlyRecGP)} recurring + ${money(cwOnlyNRGP)} non-recurring). Current monthly recurring run-rate: ${money(cwRecMonthly)}/mo.`);
-    } else {
-      theGood.push(`${closedWonDeals.length} deals closed and won with ${money(cwRecMonthly)}/mo recurring GP and ${money(cwNRTotal)} non-recurring GP.`);
-    }
+  // ── Build gap bridge deals with delivery risk ──
+  const gapBridgeDeals = negotiatingDeals.map(d => {
+    const deliveryDays = getDeliveryDays(d);
+    const closeParsed = parseMonth(d.predictedMonth || d.billingStart);
+    const billingParsed = deliveryDays > 0 ? addDays(closeParsed, deliveryDays) : null;
+    const billsThisYear = deliveryDays > 0 ? isBeforeDec(billingParsed) : true; // assume safe if unknown
+    const hasDeliveryRisk = deliveryDays > 0 && !billsThisYear;
+    return {
+      customer: d.customer || 'Unknown',
+      description: d.description || '',
+      serviceType: d.serviceType || '',
+      dealType: d.dealType || '',
+      monthlyGP: d.profit,
+      expectedClose: d.predictedMonth || d.billingStart || 'TBC',
+      billingStart: deliveryDays > 0 ? fmtMonth(billingParsed) : '—',
+      deliveryDays,
+      billsThisYear,
+      hasDeliveryRisk,
+      owner: d.owner || '',
+    };
+  }).sort((a, b) => b.monthlyGP - a.monthlyGP);
+
+  const totalNegGP = gapBridgeDeals.reduce((s, d) => s + d.monthlyGP, 0);
+  const atRiskDeals = gapBridgeDeals.filter(d => d.hasDeliveryRisk);
+  const atRiskGP = atRiskDeals.reduce((s, d) => s + d.monthlyGP, 0);
+
+  // Group negotiating deals by close month for the narrative
+  const byCloseMonth = {};
+  gapBridgeDeals.forEach(d => {
+    const m = d.expectedClose || 'TBC';
+    if (!byCloseMonth[m]) byCloseMonth[m] = { gp: 0, count: 0 };
+    byCloseMonth[m].gp += d.monthlyGP;
+    byCloseMonth[m].count += 1;
+  });
+  const closeMonthSummary = Object.entries(byCloseMonth)
+    .map(([month, data]) => `${month}: ${data.count} deal${data.count > 1 ? 's' : ''} (${money(data.gp)}/mo GP)`)
+    .join(', ');
+
+  // ── The Good ──
+  if (closedWonDeals.length > 0 && cwOnlyTotalGP > 0) {
+    theGood.push(`${closedWonDeals.length} deals closed and won, contributing ${money(cwOnlyTotalGP)} GP to the year (R78-weighted: ${money(cwOnlyRecGP)} recurring + ${money(cwOnlyNRGP)} non-recurring).`);
   }
-  if (netProfitTotal > 0) theGood.push(`Full forecast (CW + Negotiating) projects net profit of ${money(netProfitTotal)} for the year — viable if negotiating deals land.`);
+  if (netProfitTotal > 0) {
+    theGood.push(`Based on forecast deals, we are projecting profitability before calendar year end with a net profit of ${money(netProfitTotal)}.`);
+  }
+  if (closeMonthSummary) {
+    theGood.push(`We are looking to close the remaining ${money(gap)} gap across the following months: ${closeMonthSummary}.`);
+  }
   if (breakevenMonth) theGood.push(`Recurring GP covers costs from ${breakevenMonth.month} — self-sustaining position reached.`);
   if (avgGrowth > 0) theGood.push(`Recurring GP trending upward with avg. monthly growth of ${money(avgGrowth)}.`);
   const strongReps = repPerformance.filter(r => r.pctTarget >= 60);
   if (strongReps.length > 0) theGood.push(`${strongReps.map(r => r.owner).join(' & ')} tracking above 60% of £24k target.`);
-  if (bigRecurring.length > 0) theGood.push(`${bigRecurring.length} high-value recurring deals (≥${money(MRR_HIGH)}/mo MRR) in the pipeline.`);
   if (mdfTotal > 0) theGood.push(`MDF contributes ${money(mdfTotal)} as an additional profit buffer.`);
 
-  if (netProfitTotal < 0) theBad.push(`Forecast shows net loss of ${money(netProfitTotal)}. Cost control and pipeline conversion are critical.`);
-  const cwOnlyGross = cwOnlyTotalGP - totalCostTotal;
-  if (cwOnlyGross < 0 && cwOnlyTotalGP > 0) theBad.push(`On Closed/Won-only basis (R78-weighted), the year-end position is a ${money(Math.abs(cwOnlyGross))} loss. We need negotiating deals to close to break even.`);
+  // ── The Bad ──
+  if (gap > 0) {
+    theBad.push(`Closed/Won deals generate ${money(cwOnlyTotalGP)} GP against ${money(totalCostTotal)} in costs — a gap of ${money(gap)}. The business is reliant on closing negotiating pipeline to bridge this gap.`);
+  }
+  if (netProfitTotal < 0) theBad.push(`Even with negotiating deals, forecast shows a net loss of ${money(Math.abs(netProfitTotal))}. Cost control and pipeline conversion are critical.`);
+
+  // Delivery risk narrative
+  if (atRiskDeals.length > 0) {
+    const atRiskNames = atRiskDeals.map(d => `${d.customer} (${d.deliveryDays}-day delivery, closes ${d.expectedClose})`).join('; ');
+    theBad.push(`DELIVERY RISK: ${atRiskDeals.length} deal${atRiskDeals.length > 1 ? 's' : ''} totalling ${money(atRiskGP)}/mo GP may not bill before December due to delivery timelines. VCTo audits require 120 days, migrations 50-60 days. At-risk deals: ${atRiskNames}.`);
+    theBad.push(`The challenge is not just closing these deals — it is delivering them. Billing start date follows completion of delivery. Deals closing after August with 120-day delivery timelines will not accrue revenue before calendar year end.`);
+  }
+  if (gapBridgeDeals.length > 0 && gap > 0) {
+    theBad.push(`${negotiatingDeals.length} deals bridge the ${money(gap)} gap (${money(totalNegGP)}/mo GP total). See "Deals Bridging the Gap" table for customer, value, expected close, delivery time and billing start.`);
+  }
   const weakReps = repPerformance.filter(r => r.pctTarget < 30 && r.dealCount > 0);
   if (weakReps.length > 0) theBad.push(`${weakReps.map(r => r.owner).join(' & ')} below 30% of £24k target — action plans needed.`);
-  const negGPMonthly = negotiatingDeals.reduce((s, d) => s + d.profit, 0);
-  if (negotiatingDeals.length > 3 && negGPMonthly > 0) {
-    const totalForecastGP = totalGPTotal;
-    const negPctOfForecast = totalForecastGP > 0 ? negGPMonthly * 12 / totalForecastGP : 0;
-    theBad.push(`${negotiatingDeals.length} deals still in negotiation (${money(negGPMonthly)}/mo run-rate). A significant portion of forecast GP depends on these closing.`);
-  }
   if (!breakevenMonth) theBad.push(`Recurring GP doesn't cover costs in forecast period — reliant on non-recurring revenue.`);
 
   const totalPCount = pipelineRecurring.length;
@@ -229,7 +301,7 @@ function analyseData(boardPlan, r78Data) {
     { band: `Small (<${money(NRR_LOW)})`, count: smallNR.length, gp: smallNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(smallNR.length / nonRecurringDeals.length) : '0%' },
   ];
 
-  return { theGood, theBad, trends, sizeDist, nrDist, repPerformance, breakevenMonth };
+  return { theGood, theBad, trends, sizeDist, nrDist, repPerformance, breakevenMonth, gapBridgeDeals, gap, cwOnlyTotalGP, totalCostTotal };
 }
 
 // ── PDF Generator ────────────────────────────────────────────────────────────
@@ -354,6 +426,48 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   heading('The Bad', 'Risks, concerns and areas requiring attention');
   if (analysis.theBad.length === 0) bullet('No significant concerns — all on track.', BRAND.green);
   analysis.theBad.forEach(item => bullet(item, BRAND.red));
+  y += 4;
+
+  // ── Deals Bridging the Gap table ──
+  if (analysis.gapBridgeDeals.length > 0 && analysis.gap > 0) {
+    heading('Deals Bridging the Gap', `CW GP: ${money(analysis.cwOnlyTotalGP)} | Costs: ${money(analysis.totalCostTotal)} | Gap: ${money(analysis.gap)} — these negotiating deals must close AND deliver to reach profitability`);
+    const gapRows = analysis.gapBridgeDeals.map(d => {
+      const deliveryCol = d.deliveryDays > 0 ? `${d.deliveryDays}d` : '—';
+      const riskFlag = d.hasDeliveryRisk ? ' ⚠' : '';
+      return [
+        d.customer,
+        d.dealType,
+        { text: money(d.monthlyGP), align: 'right' },
+        d.expectedClose,
+        deliveryCol + riskFlag,
+        d.billingStart,
+      ];
+    });
+    const totalNegGP = analysis.gapBridgeDeals.reduce((s, d) => s + d.monthlyGP, 0);
+    gapRows.push([
+      { text: 'TOTAL', bold: true },
+      '',
+      { text: money(totalNegGP), align: 'right', bold: true },
+      '', '', '',
+    ]);
+    y = drawTable(pdf, y, margin, contentW,
+      ['Customer', 'Type', { text: 'Mo. GP', align: 'right' }, 'Close', 'Delivery', 'Bills From'],
+      gapRows,
+      { headColor: [180, 40, 40], colWidths: [42, 22, 28, 28, 25, 28], pageH }
+    );
+
+    // Delivery risk footnote
+    const atRisk = analysis.gapBridgeDeals.filter(d => d.hasDeliveryRisk);
+    if (atRisk.length > 0) {
+      y += 2;
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(...BRAND.red);
+      const riskNote = `⚠ Delivery risk: ${atRisk.map(d => d.customer).join(', ')} — billing may not start before Dec 2026. VCTo audits require 120 days, migrations 50-60 days.`;
+      const riskLines = pdf.splitTextToSize(riskNote, contentW);
+      riskLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
+      pdf.setFont('helvetica', 'normal');
+    }
+    y += 4;
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // SALES TRENDS
