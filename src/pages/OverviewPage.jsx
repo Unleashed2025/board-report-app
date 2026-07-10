@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import Layout from '../components/Layout';
 import { useData } from '../data/DataContext.jsx';
@@ -106,6 +106,43 @@ export default function OverviewPage() {
 
 function BoardPlanDashboard({ boardPlan }) {
   const [activeTab, setActiveTab] = useState('pipeline');
+  const [exporting, setExporting] = useState(false);
+  const [cwPeriod, setCwPeriod] = useState('all');
+  const reportRef = useRef(null);
+
+  const handleExportPDF = useCallback(async () => {
+    if (!reportRef.current) return;
+    setExporting(true);
+    try {
+      const { default: html2pdf } = await import('html2pdf.js');
+      const tabLabel = activeTab === 'closedwon' ? 'Closed_Won_Report' : 'Board_Report';
+      const dateStr = new Date().toISOString().split('T')[0];
+      const opt = {
+        margin: [8, 8, 8, 8],
+        filename: `${tabLabel}_${dateStr}.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          logging: false,
+          backgroundColor: '#0D2338',
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+        },
+        pagebreak: { mode: ['css', 'legacy'], before: '.report-page' },
+      };
+      await html2pdf().set(opt).from(reportRef.current).save();
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      window.print();
+    } finally {
+      setExporting(false);
+    }
+  }, [activeTab]);
   const {
     monthlyData, costBreakdown, gpByServiceType, gpByRep, employeeCosts,
     closedTotalGP, closedRecurringGP, closedNonRecurringGP,
@@ -136,48 +173,443 @@ function BoardPlanDashboard({ boardPlan }) {
     (d.dealType !== 'Recurring' && d.revenue >= 7500)
   ).sort((a, b) => b.revenue - a.revenue);
 
-  // Closed Won report view
+  // Rule of 78 GP contribution for recurring deals
+  // Calendar Year: Jan=12/78 ... Dec=1/78
+  // FY (Oct-Sep):  Oct=12/78 ... Sep=1/78
+  const RULE_OF_78_TOTAL = 78; // 12+11+10+...+1
+  const r78Now = new Date();
+  const currentYear = r78Now.getFullYear();
+  const currentMonthIdx = r78Now.getMonth();
+  const fyStartYear = currentMonthIdx >= 9 ? currentYear : currentYear - 1;
+  const monthNames78 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // FY month order: Oct(0), Nov(1), Dec(2), Jan(3), Feb(4), ..., Sep(11)
+  const fyMonthOrder = [9,10,11,0,1,2,3,4,5,6,7,8]; // calendar month indices in FY order
+  const fyMonthLabels = fyMonthOrder.map(m => monthNames78[m]);
+
+  // Convert calendar month index to FY position (0-11 where 0=Oct)
+  const calToFyPos = (mi) => (mi + 3) % 12; // Oct(9)→0, Nov(10)→1, ..., Sep(8)→11
+
+  const calcRule78GP = (deal, mode = 'year') => {
+    if (deal.dealType !== 'Recurring' || !deal.billingStart) return { annualGP: deal.profit * 12, calYearGP: 0, fyGP: 0, monthsActive: 0, weight: 0 };
+    const annualGP = deal.profit * 12;
+    const parts = String(deal.billingStart).split(' ');
+    const mi = monthNames78.indexOf(parts[0]);
+    const yr = parseInt(parts[1]);
+    if (mi === -1 || isNaN(yr)) return { annualGP, calYearGP: 0, fyGP: 0, monthsActive: 0, weight: 0, startMonth: '?', startYear: yr };
+
+    // Calendar year R78
+    let calWeight = 0, calMonths = 0;
+    const calStart = yr < currentYear ? 0 : (yr === currentYear ? mi : 12);
+    for (let m = calStart; m < 12; m++) { calWeight += (12 - m); calMonths++; }
+    const calYearGP = (calWeight / RULE_OF_78_TOTAL) * annualGP;
+
+    // FY R78 (Oct fyStartYear – Sep fyStartYear+1)
+    let fyWeight = 0, fyMonths = 0;
+    const fyPos = calToFyPos(mi);
+    // Is the deal within this FY?
+    const inFY = (yr === fyStartYear && mi >= 9) || (yr === fyStartYear + 1 && mi <= 8);
+    const beforeFY = (yr < fyStartYear) || (yr === fyStartYear && mi < 9);
+    const fyStart = beforeFY ? 0 : (inFY ? fyPos : 12);
+    for (let p = fyStart; p < 12; p++) { fyWeight += (12 - p); fyMonths++; }
+    const fyGP = (fyWeight / RULE_OF_78_TOTAL) * annualGP;
+
+    const activeWeight = mode === 'fy' ? fyWeight : calWeight;
+    const activeMonths = mode === 'fy' ? fyMonths : calMonths;
+    const activeGP = mode === 'fy' ? fyGP : calYearGP;
+
+    return { annualGP, calYearGP, fyGP, monthsActive: activeMonths, weight: activeWeight, startMonth: `${monthNames78[mi]} ${yr}`, resultGP: activeGP };
+  };
+
+  const buildR78Grid = (dealSet, mode = 'year') => {
+    const isFY = mode === 'fy';
+    const labels = isFY ? fyMonthLabels : monthNames78;
+    const rows = dealSet.map(d => {
+      const parts = String(d.billingStart || '').split(' ');
+      const mi = monthNames78.indexOf(parts[0]);
+      const yr = parseInt(parts[1]);
+
+      let startPos;
+      if (isFY) {
+        const inFY = (yr === fyStartYear && mi >= 9) || (yr === fyStartYear + 1 && mi <= 8);
+        const beforeFY = (yr < fyStartYear) || (yr === fyStartYear && mi < 9);
+        startPos = (isNaN(yr) || mi === -1) ? 0 : (beforeFY ? 0 : (inFY ? calToFyPos(mi) : 12));
+      } else {
+        startPos = (isNaN(yr) || mi === -1) ? 0 : (yr < currentYear ? 0 : (yr === currentYear ? mi : 12));
+      }
+      const months = Array.from({ length: 12 }, (_, m) => m >= startPos ? d.profit : 0);
+      const r78 = calcRule78GP(d, mode);
+      return { ...d, startIdx: startPos, months, r78 };
+    });
+    const totals = Array.from({ length: 12 }, (_, m) => rows.reduce((s, r) => s + r.months[m], 0));
+    const r78GrandTotal = rows.reduce((s, r) => s + r.r78.resultGP, 0);
+    return { rows, totals, r78GrandTotal, labels };
+  };
+
+  const Rule78Grid = ({ title, subtitle, dealSet, accentColor, mode = 'year' }) => {
+    const grid = buildR78Grid(dealSet, mode);
+    const periodLabel = mode === 'fy' ? `FY Oct ${fyStartYear} – Sep ${fyStartYear + 1}` : `Calendar Year ${currentYear}`;
+    return (
+      <section className={`${cardClass} report-page`}>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h2 className="text-lg font-bold text-white">{title}</h2>
+            <p className="text-xs text-[#5A7A95]">{subtitle}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-[#5A7A95]">R78 {periodLabel} GP</p>
+            <p className={`text-xl font-bold ${accentColor}`}>{money(grid.r78GrandTotal)}</p>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                <th className="text-left py-1.5 pr-2 sticky left-0 bg-[#1A334F] min-w-[140px]">Customer</th>
+                <th className="text-left py-1.5 pr-2 min-w-[60px]">Rep</th>
+                <th className="text-right py-1.5 pr-2 min-w-[55px]">Mo. GP</th>
+                {grid.labels.map(m => (
+                  <th key={m} className="text-right py-1.5 min-w-[52px]">{m}</th>
+                ))}
+                <th className="text-right py-1.5 pl-2 min-w-[62px]">R78 GP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grid.rows.sort((a, b) => a.startIdx - b.startIdx || b.profit - a.profit).map((d, i) => (
+                <tr key={(d.id || d.customer) + i} className="border-b border-[#2A4A6F]/20 text-white">
+                  <td className="py-1 pr-2 font-medium sticky left-0 bg-[#1A334F] truncate max-w-[140px]">{d.customer}</td>
+                  <td className="py-1 pr-2 text-[#5A7A95]">{d.owner}</td>
+                  <td className="py-1 pr-2 text-right text-[#0EA5E9]">{money(d.profit)}</td>
+                  {d.months.map((v, m) => (
+                    <td key={m} className={`py-1 text-right ${v > 0 ? 'text-[#059669]' : 'text-[#2A4A6F]'}`}>
+                      {v > 0 ? money(v) : '\u2014'}
+                    </td>
+                  ))}
+                  <td className="py-1 pl-2 text-right font-bold text-[#059669]">{money(d.r78.resultGP)}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-[#0EA5E9] font-bold text-white">
+                <td className="py-2 sticky left-0 bg-[#1A334F]" colSpan={2}>Monthly Total</td>
+                <td className="py-2 text-right text-[#0EA5E9]">{money(grid.rows.reduce((s, r) => s + r.profit, 0))}</td>
+                {grid.totals.map((t, m) => (
+                  <td key={m} className="py-2 text-right text-[#059669]">{money(t)}</td>
+                ))}
+                <td className="py-2 pl-2 text-right text-[#059669]">{money(grid.r78GrandTotal)}</td>
+              </tr>
+              <tr className="text-[#5A7A95] text-[9px]">
+                <td className="py-1 sticky left-0 bg-[#1A334F]" colSpan={2}>R78 Weight</td>
+                <td className="py-1"></td>
+                {grid.labels.map((_, m) => (
+                  <td key={m} className="py-1 text-right">{12 - m}/78</td>
+                ))}
+                <td className="py-1"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    );
+  };
+
+  // Pre-compute R78 for both modes
+  const cwRecWithR78Cal = cwRecurring.map(d => ({ ...d, r78: calcRule78GP(d, 'year') }));
+  const cwRecWithR78FY = cwRecurring.map(d => ({ ...d, r78: calcRule78GP(d, 'fy') }));
+  const totalCalYearRecurringGP = cwRecWithR78Cal.reduce((s, d) => s + d.r78.resultGP, 0);
+  const totalFYRecurringGP = cwRecWithR78FY.reduce((s, d) => s + d.r78.resultGP, 0);
+  const totalAnnualisedRecurringGP = cwRecWithR78Cal.reduce((s, d) => s + d.r78.annualGP, 0);
+
+  const negRecurring = negotiatingDeals.filter(d => d.dealType === 'Recurring');
+  const negRecWithR78Cal = negRecurring.map(d => ({ ...d, r78: calcRule78GP(d, 'year') }));
+  const negRecWithR78FY = negRecurring.map(d => ({ ...d, r78: calcRule78GP(d, 'fy') }));
+  const combinedR78Cal = [...cwRecWithR78Cal, ...negRecWithR78Cal];
+  const combinedR78FY = [...cwRecWithR78FY, ...negRecWithR78FY];
+
+  // Period filter helpers for Closed Won
+  const cwFilterMonthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const cwNow = new Date();
+  const cwCurMonth = cwNow.getMonth();
+  const cwCurYear = cwNow.getFullYear();
+  const cwCurQuarter = Math.floor(cwCurMonth / 3);
+
+  const parseDealMonth = (label) => {
+    if (!label) return null;
+    const parts = String(label).split(' ');
+    const mi = cwFilterMonthNames.indexOf(parts[0]);
+    const yr = parseInt(parts[1]);
+    if (mi === -1 || isNaN(yr)) return null;
+    return { month: mi, year: yr };
+  };
+
+  const cwPeriodFilter = (deal) => {
+    if (cwPeriod === 'all') return true;
+    const p = parseDealMonth(deal.predictedMonth);
+    if (!p) return false;
+    if (cwPeriod === 'month') return p.year === cwCurYear && p.month === cwCurMonth;
+    if (cwPeriod === 'quarter') return p.year === cwCurYear && Math.floor(p.month / 3) === cwCurQuarter;
+    if (cwPeriod === 'fy') {
+      if (p.year === fyStartYear && p.month >= 9) return true;
+      if (p.year === fyStartYear + 1 && p.month <= 8) return true;
+      return false;
+    }
+    if (cwPeriod === 'year') return p.year === cwCurYear;
+    return true;
+  };
+
+  const cwPeriodLabel = cwPeriod === 'month' ? `${cwFilterMonthNames[cwCurMonth]} ${cwCurYear}`
+    : cwPeriod === 'quarter' ? `Q${cwCurQuarter + 1} ${cwCurYear}`
+    : cwPeriod === 'fy' ? `FY Oct ${fyStartYear} \u2013 Sep ${fyStartYear + 1}`
+    : cwPeriod === 'year' ? `Calendar Year ${cwCurYear}`
+    : 'All Time';
+
   if (activeTab === 'closedwon') {
+    const filteredCW = closedWonDeals.filter(cwPeriodFilter);
+    const fCwRec = filteredCW.filter(d => d.dealType === 'Recurring');
+    const fCwNR = filteredCW.filter(d => d.dealType !== 'Recurring');
+    const fRecRev = fCwRec.reduce((s, d) => s + d.revenue, 0);
+    const fRecGP = fCwRec.reduce((s, d) => s + d.profit, 0);
+    const fNRRev = fCwNR.reduce((s, d) => s + d.revenue, 0);
+    const fNRGP = fCwNR.reduce((s, d) => s + d.profit, 0);
+    const fRecR78Cal = fCwRec.map(d => ({ ...d, r78: calcRule78GP(d, 'year') }));
+    const fRecR78FY = fCwRec.map(d => ({ ...d, r78: calcRule78GP(d, 'fy') }));
+    const fTotalCalGP = fRecR78Cal.reduce((s, d) => s + d.r78.resultGP, 0);
+    const fTotalFYGP = fRecR78FY.reduce((s, d) => s + d.r78.resultGP, 0);
+    const fAnnualisedGP = fRecR78Cal.reduce((s, d) => s + d.r78.annualGP, 0);
+    const fNegRec = negotiatingDeals.filter(d => d.dealType === 'Recurring').filter(cwPeriodFilter);
+    const fCombinedCal = [...fRecR78Cal, ...fNegRec.map(d => ({ ...d, r78: calcRule78GP(d, 'year') }))];
+    const fCombinedFY = [...fRecR78FY, ...fNegRec.map(d => ({ ...d, r78: calcRule78GP(d, 'fy') }))];
+
+    const PeriodBtn = ({ id, label }) => (
+      <button onClick={() => setCwPeriod(id)}
+        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${cwPeriod === id ? 'bg-[#0EA5E9] text-white' : 'bg-[#0D2338] border border-[#2A4A6F] text-[#5A7A95] hover:text-white'}`}
+      >{label}</button>
+    );
+
     return (
       <Layout>
-        <div className="space-y-6 pb-6">
+        <div ref={reportRef} className="space-y-6 pb-6">
           {/* Tab bar */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap items-center no-print">
             <button onClick={() => setActiveTab('pipeline')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Pipeline &amp; Forecast</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0EA5E9] text-white">Closed Won Report</button>
+            <button onClick={handleExportPDF} disabled={exporting} className="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-[#059669] hover:bg-[#059669]/80 text-white transition-colors disabled:opacity-50 flex items-center gap-2">
+              {exporting ? (
+                <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Exporting...</>
+              ) : (
+                <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Export PDF</>
+              )}
+            </button>
           </div>
 
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h1 className="text-2xl font-bold text-white">Closed Won Report</h1>
-              <p className="text-sm text-[#5A7A95] mt-1">{closedWonCount} deals closed — Revenue &amp; GP breakdown</p>
+              <p className="text-sm text-[#5A7A95] mt-1">{filteredCW.length} deals — {cwPeriodLabel}</p>
+            </div>
+            <div className="flex gap-2 flex-wrap no-print">
+              <PeriodBtn id="month" label="This Month" />
+              <PeriodBtn id="quarter" label="This Quarter" />
+              <PeriodBtn id="fy" label="This FY" />
+              <PeriodBtn id="year" label="Cal Year" />
+              <PeriodBtn id="all" label="All Time" />
             </div>
           </div>
 
-          {/* Closed Won KPIs */}
+          {/* Period logic explanation */}
+          <div className={`${cardClass} border-l-4 border-[#0EA5E9]`}>
+            <p className="text-xs text-[#A0B4C8] leading-relaxed">
+              <span className="font-semibold text-white">How periods work:</span>{' '}
+              <strong>This Month</strong> shows deals with a predicted close date in the current calendar month.{' '}
+              <strong>This Quarter</strong> covers the current calendar quarter (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec).{' '}
+              <strong>This FY</strong> runs from 1 Oct to 30 Sep (e.g. Oct {fyStartYear} – Sep {fyStartYear + 1}).{' '}
+              <strong>Cal Year</strong> covers 1 Jan – 31 Dec {currentYear}.{' '}
+              <strong>All Time</strong> shows every closed-won deal regardless of date.
+              All revenue and GP figures below update to reflect the selected period.
+            </p>
+          </div>
+
+          {/* KPIs */}
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <KPICard label="Total Closed Revenue" value={money(closedWonDeals.reduce((s, d) => s + d.revenue, 0))} accent="text-white" icon="£" />
-            <KPICard label="Total Closed GP" value={money(closedWonDeals.reduce((s, d) => s + d.profit, 0))} accent="text-[#059669]" icon="£" />
-            <KPICard label="Monthly Recurring Revenue" value={money(currentMonthlyRecurringRevenue)} accent="text-[#0EA5E9]" icon="↻" subtitle={`${cwRecurring.length} recurring deals`} />
-            <KPICard label="Non-Recurring Revenue" value={money(currentNonRecurringRevenue)} accent="text-[#f59e0b]" icon="→" subtitle={`${cwNonRecurring.length} project deals`} />
+            <KPICard label="Monthly Recurring Revenue" value={money(fRecRev)} accent="text-[#0EA5E9]" icon="↻" subtitle={`${fCwRec.length} recurring contracts`} />
+            <KPICard label="Monthly Recurring GP" value={money(fRecGP)} accent="text-[#059669]" icon="↻" subtitle="Gross profit per month" />
+            <KPICard label="Non-Recurring Revenue" value={money(fNRRev)} accent="text-[#f59e0b]" icon="→" subtitle={`${fCwNR.length} one-off deals`} />
+            <KPICard label="Non-Recurring GP" value={money(fNRGP)} accent="text-[#059669]" icon="→" subtitle="Gross profit on projects" />
           </section>
 
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className={cardClass}>
+              <p className="text-xs text-[#5A7A95]">Annualised Recurring GP</p>
+              <p className="mt-1 text-2xl font-bold text-[#0EA5E9]">{money(fAnnualisedGP)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">12 months if all active full year</p>
+            </div>
+            <div className={cardClass}>
+              <p className="text-xs text-[#5A7A95]">R78 Calendar Year GP ({currentYear})</p>
+              <p className="mt-1 text-2xl font-bold text-[#059669]">{money(fTotalCalGP)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">Jan–Dec weighted by billing start</p>
+            </div>
+            <div className={cardClass}>
+              <p className="text-xs text-[#5A7A95]">R78 FY GP (Oct {fyStartYear}–Sep {fyStartYear + 1})</p>
+              <p className="mt-1 text-2xl font-bold text-[#8b5cf6]">{money(fTotalFYGP)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">Oct–Sep weighted by billing start</p>
+            </div>
+            <div className={cardClass}>
+              <p className="text-xs text-[#5A7A95]">Total Closed Won GP</p>
+              <p className="mt-1 text-2xl font-bold text-white">{money(filteredCW.reduce((s, d) => s + d.profit, 0))}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">Recurring + non-recurring</p>
+            </div>
+          </section>
+
+          {/* Rule of 78 Breakdown — Calendar Year */}
+          <section className={`${cardClass} report-page`}>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h2 className="text-lg font-bold text-white">Rule of 78 — Calendar Year ({currentYear})</h2>
+                <p className="text-xs text-[#5A7A95]">Weighted Jan–Dec GP based on predicted billing start date</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-[#5A7A95]">Total Cal Year GP</p>
+                <p className="text-xl font-bold text-[#059669]">{money(fTotalCalGP)}</p>
+              </div>
+            </div>
+            <div className="rounded-lg bg-[#0D2338] border border-[#2A4A6F] p-3 mb-4">
+              <p className="text-xs text-[#A0B4C8] leading-relaxed">
+                <span className="font-semibold text-white">Rule of 78 logic:</span>{' '}
+                The Rule of 78 calculates the actual gross profit a recurring deal will contribute within the year based on when billing starts.
+                A deal starting in January contributes 12 months of revenue (weight 78/78 = 100%), February contributes 11 months (66/78 = 85%), and so on — a deal starting in December contributes only 1 month (1/78 = 1.3%).
+                The total weight of 78 comes from 12+11+10+9+8+7+6+5+4+3+2+1.
+                This gives a realistic view of in-year GP rather than annualised figures.
+              </p>
+              <p className="text-xs text-[#A0B4C8] leading-relaxed mt-2">
+                <span className="font-semibold text-white">Calendar Year:</span>{' '}
+                Runs Jan – Dec {currentYear}. A deal billing from January has the full 12 months; a deal billing from December has just 1 month of recognised GP.
+              </p>
+            </div>
+            <p className="text-[10px] text-[#5A7A95] mb-4">
+              Weights: Jan = 78/78, Feb = 66/78, Mar = 55/78, Apr = 45/78, May = 36/78, Jun = 28/78, Jul = 21/78, Aug = 15/78, Sep = 10/78, Oct = 6/78, Nov = 3/78, Dec = 1/78
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                  <th className="text-left py-2">Customer</th>
+                  <th className="text-left py-2">Rep</th>
+                  <th className="text-left py-2">Description</th>
+                  <th className="text-right py-2">Monthly GP</th>
+                  <th className="text-right py-2">Annual GP</th>
+                  <th className="text-center py-2">Billing Start</th>
+                  <th className="text-center py-2">Months</th>
+                  <th className="text-right py-2">R78 Weight</th>
+                  <th className="text-right py-2">Cal Year GP</th>
+                  <th className="text-right py-2">FY GP</th>
+                </tr></thead>
+                <tbody>
+                  {fRecR78Cal.map((d, i) => {
+                    const fyD = fRecR78FY.find(x => x.id === d.id) || d;
+                    return (
+                    <tr key={d.id + i} className="border-b border-[#2A4A6F]/30 text-white">
+                      <td className="py-1.5 pr-2 font-medium">{d.customer}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95]">{d.owner}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95] truncate max-w-[160px]">{d.description}</td>
+                      <td className="py-1.5 text-right text-[#0EA5E9]">{money(d.profit)}</td>
+                      <td className="py-1.5 text-right">{money(d.r78.annualGP)}</td>
+                      <td className="py-1.5 text-center">{d.r78.startMonth || d.billingStart}</td>
+                      <td className="py-1.5 text-center">{d.r78.monthsActive}</td>
+                      <td className="py-1.5 text-right text-[#5A7A95]">{d.r78.weight}/{RULE_OF_78_TOTAL}</td>
+                      <td className="py-1.5 text-right font-bold text-[#059669]">{money(d.r78.calYearGP)}</td>
+                      <td className="py-1.5 text-right font-bold text-[#8b5cf6]">{money(fyD.r78.fyGP)}</td>
+                    </tr>
+                    );
+                  })}
+                  <tr className="border-t-2 border-[#0EA5E9] text-white font-bold">
+                    <td className="py-2" colSpan={3}>Total</td>
+                    <td className="py-2 text-right text-[#0EA5E9]">{money(fRecGP)}</td>
+                    <td className="py-2 text-right">{money(fAnnualisedGP)}</td>
+                    <td className="py-2" colSpan={2}></td>
+                    <td className="py-2"></td>
+                    <td className="py-2 text-right text-[#059669]">{money(fTotalCalGP)}</td>
+                    <td className="py-2 text-right text-[#8b5cf6]">{money(fTotalFYGP)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* R78 Calendar Year Grid — Closed Won */}
+          <Rule78Grid
+            title={`Rule of 78 Calendar Grid — Closed Won (${currentYear})`}
+            subtitle="Month-by-month recurring GP from closed-won deals (Jan–Dec)"
+            dealSet={fRecR78Cal}
+            accentColor="text-[#059669]"
+            mode="year"
+          />
+
+          {/* R78 FY Grid — Closed Won */}
+          <div className={`${cardClass} border-l-4 border-[#8b5cf6] mb-0`}>
+            <p className="text-xs text-[#A0B4C8] leading-relaxed">
+              <span className="font-semibold text-white">FY Rule of 78 logic:</span>{' '}
+              The financial year runs from 1 October to 30 September.
+              A deal starting billing in October (start of FY) gets 12 months of recognised GP (weight 78/78 = 100%).
+              A deal starting in September (last month of FY) gets just 1 month (weight 1/78 = 1.3%).
+              This mirrors the Calendar Year logic but shifted to the Oct–Sep financial year cycle, giving an accurate view of in-year FY GP contribution.
+            </p>
+          </div>
+          <Rule78Grid
+            title={`Rule of 78 FY Grid — Closed Won (Oct ${fyStartYear}–Sep ${fyStartYear + 1})`}
+            subtitle="Month-by-month recurring GP from closed-won deals (Oct–Sep)"
+            dealSet={fRecR78FY}
+            accentColor="text-[#8b5cf6]"
+            mode="fy"
+          />
+
+          {/* R78 Calendar Year Grid — Closed Won + Negotiating */}
+          <div className={`${cardClass} border-l-4 border-[#0EA5E9] mb-0`}>
+            <p className="text-xs text-[#A0B4C8] leading-relaxed">
+              <span className="font-semibold text-white">CW + Negotiating view:</span>{' '}
+              The grids below include deals currently in the Negotiating stage alongside Closed Won.
+              This provides a forward-looking view of potential GP if all negotiating deals close as expected, helping forecast total revenue recognition for the year.
+            </p>
+          </div>
+          <Rule78Grid
+            title={`Rule of 78 Calendar Grid — CW + Negotiating (${currentYear})`}
+            subtitle="Combined pipeline including negotiating deals (Jan–Dec)"
+            dealSet={fCombinedCal}
+            accentColor="text-[#0EA5E9]"
+            mode="year"
+          />
+
+          {/* R78 FY Grid — Closed Won + Negotiating */}
+          <Rule78Grid
+            title={`Rule of 78 FY Grid — CW + Negotiating (Oct ${fyStartYear}–Sep ${fyStartYear + 1})`}
+            subtitle="Combined pipeline including negotiating deals (Oct–Sep)"
+            dealSet={fCombinedFY}
+            accentColor="text-[#0EA5E9]"
+            mode="fy"
+          />
+
           {/* Closed Won by Rep */}
-          <section className={cardClass}>
+          <section className={`${cardClass} report-page`}>
             <h2 className="text-lg font-bold text-white mb-4">Closed Won by Sales Rep</h2>
             {(() => {
-              const owners = [...new Set(closedWonDeals.map(d => d.owner).filter(Boolean))].sort();
+              const owners = [...new Set(filteredCW.map(d => d.owner).filter(Boolean))].sort();
               return (
                 <div className="space-y-4">
                   {owners.map(owner => {
-                    const deals = closedWonDeals.filter(d => d.owner === owner);
+                    const deals = filteredCW.filter(d => d.owner === owner);
+                    const recDeals = deals.filter(d => d.dealType === 'Recurring');
+                    const nrDeals = deals.filter(d => d.dealType !== 'Recurring');
                     const totalRev = deals.reduce((s, d) => s + d.revenue, 0);
                     const totalGP = deals.reduce((s, d) => s + d.profit, 0);
+                    const recGP = recDeals.reduce((s, d) => s + d.profit, 0);
+                    const nrGP = nrDeals.reduce((s, d) => s + d.profit, 0);
                     return (
                       <div key={owner}>
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                           <span className="text-white font-medium">{owner}</span>
-                          <span className="text-sm text-[#5A7A95]">{deals.length} deals • Rev: {money(totalRev)} • GP: {money(totalGP)}</span>
+                          <div className="flex gap-3 text-xs text-[#5A7A95]">
+                            <span>{deals.length} deals</span>
+                            <span>Rev: {money(totalRev)}</span>
+                            <span className="text-[#0EA5E9]">Rec GP: {money(recGP)}/mo</span>
+                            <span className="text-[#f59e0b]">NR GP: {money(nrGP)}</span>
+                            <span className="text-[#059669] font-medium">Total GP: {money(totalGP)}</span>
+                          </div>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs">
@@ -188,7 +620,7 @@ function BoardPlanDashboard({ boardPlan }) {
                               <th className="text-left py-1.5">Service</th>
                               <th className="text-right py-1.5">Revenue</th>
                               <th className="text-right py-1.5">GP</th>
-                              <th className="text-right py-1.5">Month</th>
+                              <th className="text-right py-1.5">Billing Start</th>
                             </tr></thead>
                             <tbody>
                               {deals.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
@@ -199,7 +631,7 @@ function BoardPlanDashboard({ boardPlan }) {
                                   <td className="py-1.5 pr-2 text-[#5A7A95]">{d.serviceType}</td>
                                   <td className="py-1.5 text-right font-medium">{money(d.revenue)}</td>
                                   <td className="py-1.5 text-right text-[#059669]">{money(d.profit)}</td>
-                                  <td className="py-1.5 text-right text-[#5A7A95]">{d.predictedMonth}</td>
+                                  <td className="py-1.5 text-right text-[#5A7A95]">{d.billingStart || d.predictedMonth}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -213,58 +645,79 @@ function BoardPlanDashboard({ boardPlan }) {
             })()}
           </section>
 
-          {/* Closed Won by Service Type */}
-          <section className="grid gap-6 xl:grid-cols-2">
+          {/* Charts */}
+          <section className="grid gap-6 xl:grid-cols-2 report-page">
             <div className={cardClass}>
-              <h2 className="text-lg font-bold text-white mb-4">By Deal Type</h2>
+              <h2 className="text-lg font-bold text-white mb-4">Revenue by Deal Type</h2>
               <div className="h-56">
                 <Doughnut
                   data={{
-                    labels: ['Recurring', 'Non-Recurring'],
+                    labels: ['Recurring Revenue', 'Non-Recurring Revenue'],
                     datasets: [{
-                      data: [cwRecurring.reduce((s, d) => s + d.revenue, 0), cwNonRecurring.reduce((s, d) => s + d.revenue, 0)],
+                      data: [fRecRev, fNRRev],
                       backgroundColor: ['#0EA5E9', '#f59e0b'],
                       borderColor: '#1A334F',
                       borderWidth: 3,
                     }],
                   }}
-                  options={{ responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#E2E8F0' } } } }}
+                  options={{ responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#E2E8F0' } }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${money(ctx.raw)}` } } } }}
                 />
               </div>
             </div>
             <div className={cardClass}>
-              <h2 className="text-lg font-bold text-white mb-4">By Service Type</h2>
-              {(() => {
-                const types = [...new Set(closedWonDeals.map(d => d.serviceType).filter(Boolean))];
-                return (
-                  <div className="space-y-2">
-                    {types.map(type => {
-                      const rev = closedWonDeals.filter(d => d.serviceType === type).reduce((s, d) => s + d.revenue, 0);
-                      const gp = closedWonDeals.filter(d => d.serviceType === type).reduce((s, d) => s + d.profit, 0);
-                      return (
-                        <div key={type} className="flex items-center justify-between text-sm">
-                          <span className="text-[#5A7A95]">{type}</span>
-                          <span className="text-white font-medium">Rev: {money(rev)} • GP: {money(gp)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+              <h2 className="text-lg font-bold text-white mb-4">GP by Deal Type</h2>
+              <div className="h-56">
+                <Doughnut
+                  data={{
+                    labels: ['Recurring GP', 'Non-Recurring GP'],
+                    datasets: [{
+                      data: [fRecGP, fNRGP],
+                      backgroundColor: ['#059669', '#8b5cf6'],
+                      borderColor: '#1A334F',
+                      borderWidth: 3,
+                    }],
+                  }}
+                  options={{ responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#E2E8F0' } }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${money(ctx.raw)}` } } } }}
+                />
+              </div>
             </div>
           </section>
 
-          {/* Monthly Recurring Deals */}
+          {/* By Service Type */}
           <section className={cardClass}>
+            <h2 className="text-lg font-bold text-white mb-4">Closed Won by Service Type</h2>
+            {(() => {
+              const types = [...new Set(filteredCW.map(d => d.serviceType).filter(Boolean))].sort();
+              return (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {types.map(type => {
+                    const typeDeals = filteredCW.filter(d => d.serviceType === type);
+                    const rev = typeDeals.reduce((s, d) => s + d.revenue, 0);
+                    const gp = typeDeals.reduce((s, d) => s + d.profit, 0);
+                    const recCount = typeDeals.filter(d => d.dealType === 'Recurring').length;
+                    return (
+                      <div key={type} className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-3">
+                        <p className="text-xs font-semibold text-white">{type}</p>
+                        <p className="text-lg font-bold text-[#059669] mt-1">{money(gp)} <span className="text-xs font-normal text-[#5A7A95]">GP</span></p>
+                        <p className="text-xs text-[#5A7A95]">{typeDeals.length} deals ({recCount} rec) • Rev: {money(rev)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </section>
+
+          {/* Monthly Recurring Deals Table */}
+          <section className={`${cardClass} report-page`}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-bold text-white">Monthly Recurring Revenue — Closed Won</h2>
-                <p className="text-xs text-[#5A7A95]">{cwRecurring.length} recurring contracts</p>
+                <p className="text-xs text-[#5A7A95]">{fCwRec.length} recurring contracts</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-[#5A7A95]">Monthly Revenue</p>
-                <p className="text-xl font-bold text-[#0EA5E9]">{money(currentMonthlyRecurringRevenue)}</p>
-                <p className="text-xs text-[#059669]">GP: {money(currentMonthlyRecurringGP)}</p>
+                <p className="text-xs text-[#5A7A95]">Monthly Revenue / GP</p>
+                <p className="text-xl font-bold text-[#0EA5E9]">{money(fRecRev)} <span className="text-[#059669]">/ {money(fRecGP)}</span></p>
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -276,36 +729,44 @@ function BoardPlanDashboard({ boardPlan }) {
                   <th className="text-left py-2">Service</th>
                   <th className="text-right py-2">Monthly Rev</th>
                   <th className="text-right py-2">Monthly GP</th>
-                  <th className="text-right py-2">Start</th>
+                  <th className="text-center py-2">Billing Start</th>
+                  <th className="text-right py-2">Cal Year GP (R78)</th>
                 </tr></thead>
                 <tbody>
-                  {cwRecurring.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
+                  {fRecR78Cal.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
                     <tr key={d.id + i} className="border-b border-[#2A4A6F]/30 text-white">
                       <td className="py-1.5 pr-2 font-medium">{d.customer}</td>
                       <td className="py-1.5 pr-2 text-[#5A7A95]">{d.owner}</td>
-                      <td className="py-1.5 pr-2 text-[#5A7A95] truncate max-w-[180px]">{d.description}</td>
+                      <td className="py-1.5 pr-2 text-[#5A7A95] truncate max-w-[160px]">{d.description}</td>
                       <td className="py-1.5 pr-2 text-[#5A7A95]">{d.serviceType}</td>
                       <td className="py-1.5 text-right text-[#0EA5E9]">{money(d.revenue)}</td>
                       <td className="py-1.5 text-right text-[#059669]">{money(d.profit)}</td>
-                      <td className="py-1.5 text-right text-[#5A7A95]">{d.predictedMonth}</td>
+                      <td className="py-1.5 text-center">{d.billingStart || d.predictedMonth}</td>
+                      <td className="py-1.5 text-right font-medium text-[#059669]">{money(d.r78.calYearGP)}</td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-[#0EA5E9] text-white font-bold">
+                    <td className="py-2" colSpan={4}>Total</td>
+                    <td className="py-2 text-right text-[#0EA5E9]">{money(fRecRev)}</td>
+                    <td className="py-2 text-right text-[#059669]">{money(fRecGP)}</td>
+                    <td className="py-2"></td>
+                    <td className="py-2 text-right text-[#059669]">{money(fTotalCalGP)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </section>
 
-          {/* Non-Recurring Deals */}
-          <section className={cardClass}>
+          {/* Non-Recurring Deals Table */}
+          <section className={`${cardClass} report-page`}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-bold text-white">Non-Recurring Revenue — Closed Won</h2>
-                <p className="text-xs text-[#5A7A95]">{cwNonRecurring.length} project deals</p>
+                <p className="text-xs text-[#5A7A95]">{fCwNR.length} project deals</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-[#5A7A95]">Total Revenue</p>
-                <p className="text-xl font-bold text-[#f59e0b]">{money(currentNonRecurringRevenue)}</p>
-                <p className="text-xs text-[#059669]">GP: {money(currentNonRecurringGP)}</p>
+                <p className="text-xs text-[#5A7A95]">Total Revenue / GP</p>
+                <p className="text-xl font-bold text-[#f59e0b]">{money(fNRRev)} <span className="text-[#059669]">/ {money(fNRGP)}</span></p>
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -318,10 +779,10 @@ function BoardPlanDashboard({ boardPlan }) {
                   <th className="text-right py-2">Revenue</th>
                   <th className="text-right py-2">Cost</th>
                   <th className="text-right py-2">GP</th>
-                  <th className="text-right py-2">Month</th>
+                  <th className="text-center py-2">Billing Start</th>
                 </tr></thead>
                 <tbody>
-                  {cwNonRecurring.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
+                  {fCwNR.sort((a, b) => b.revenue - a.revenue).map((d, i) => (
                     <tr key={d.id + i} className="border-b border-[#2A4A6F]/30 text-white">
                       <td className="py-1.5 pr-2 font-medium">{d.customer}</td>
                       <td className="py-1.5 pr-2 text-[#5A7A95]">{d.owner}</td>
@@ -330,9 +791,16 @@ function BoardPlanDashboard({ boardPlan }) {
                       <td className="py-1.5 text-right text-[#f59e0b]">{money(d.revenue)}</td>
                       <td className="py-1.5 text-right text-[#ef4444]">{money(d.cost)}</td>
                       <td className="py-1.5 text-right text-[#059669]">{money(d.profit)}</td>
-                      <td className="py-1.5 text-right text-[#5A7A95]">{d.predictedMonth}</td>
+                      <td className="py-1.5 text-center text-[#5A7A95]">{d.billingStart || d.predictedMonth}</td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-[#f59e0b] text-white font-bold">
+                    <td className="py-2" colSpan={4}>Total</td>
+                    <td className="py-2 text-right text-[#f59e0b]">{money(fNRRev)}</td>
+                    <td className="py-2 text-right text-[#ef4444]">{money(fCwNR.reduce((s, d) => s + d.cost, 0))}</td>
+                    <td className="py-2 text-right text-[#059669]">{money(fNRGP)}</td>
+                    <td className="py-2"></td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -344,11 +812,18 @@ function BoardPlanDashboard({ boardPlan }) {
 
   return (
     <Layout>
-      <div className="space-y-6 pb-6">
+      <div ref={reportRef} className="space-y-6 pb-6">
         {/* Tab bar */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap items-center">
           <button className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0EA5E9] text-white">Pipeline &amp; Forecast</button>
           <button onClick={() => setActiveTab('closedwon')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Closed Won Report</button>
+          <button onClick={handleExportPDF} disabled={exporting} className="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-[#059669] hover:bg-[#059669]/80 text-white transition-colors disabled:opacity-50 flex items-center gap-2">
+            {exporting ? (
+              <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Exporting...</>
+            ) : (
+              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Export PDF</>
+            )}
+          </button>
         </div>
 
         {/* Header */}
