@@ -114,53 +114,68 @@ function BoardPlanDashboard({ boardPlan }) {
     if (!reportRef.current) return;
     setExporting(true);
     try {
-      const html2pdfModule = await import('html2pdf.js');
-      const html2pdf = html2pdfModule.default || html2pdfModule;
+      // Use html-to-image (SVG foreignObject) instead of html2canvas
+      // to avoid Tailwind v4 oklab() color parsing failures.
+      const { toPng } = await import('html-to-image');
+      const { default: jsPDF } = await import('jspdf');
+
       const tabLabel = activeTab === 'closedwon' ? 'Closed_Won_Report' : 'Board_Report';
       const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `${tabLabel}_${dateStr}.pdf`;
 
-      const opt = {
-        margin: [8, 8, 8, 8],
-        filename: `${tabLabel}_${dateStr}.pdf`,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          logging: false,
-          backgroundColor: '#0D2338',
-          onclone: (clonedDoc) => {
-            // Tailwind v4 uses oklab() colors which html2canvas can't parse.
-            // Walk all elements and inline computed colors as hex/rgb fallbacks.
-            const allEls = clonedDoc.querySelectorAll('*');
-            const colorProps = ['color', 'background-color', 'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color', 'outline-color'];
-            allEls.forEach(el => {
-              const cs = window.getComputedStyle(el);
-              colorProps.forEach(prop => {
-                try {
-                  const val = cs.getPropertyValue(prop);
-                  if (val && val.includes('oklab')) {
-                    // Create a temp element to convert oklab to rgb
-                    const tmp = document.createElement('div');
-                    tmp.style.color = val;
-                    document.body.appendChild(tmp);
-                    const rgb = window.getComputedStyle(tmp).color;
-                    document.body.removeChild(tmp);
-                    el.style.setProperty(prop, rgb, 'important');
-                  }
-                } catch(e) { /* skip */ }
-              });
-            });
-          },
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
-        },
-        pagebreak: { mode: ['css', 'legacy'], before: '.report-page' },
-      };
-      await html2pdf().set(opt).from(reportRef.current).save();
+      const el = reportRef.current;
+      const pxWidth = el.scrollWidth;
+      const pxHeight = el.scrollHeight;
+
+      // Render to PNG using the browser's native rendering (handles oklab)
+      const dataUrl = await toPng(el, {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: '#0D2338',
+      });
+
+      // A4 dimensions in mm
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 8;
+      const contentW = pageW - margin * 2;
+      const contentH = pageH - margin * 2;
+
+      // Scale image to fit A4 width
+      const imgAspect = pxHeight / pxWidth;
+      const scaledH = contentW * imgAspect;
+
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+      // If content fits one page, simple add; otherwise split across pages
+      if (scaledH <= contentH) {
+        pdf.addImage(dataUrl, 'PNG', margin, margin, contentW, scaledH);
+      } else {
+        // Multi-page: slice the image across pages
+        const totalPages = Math.ceil(scaledH / contentH);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
+
+        const srcW = img.width;
+        const srcH = img.height;
+        const sliceH = Math.floor(srcH / totalPages);
+        canvas.width = srcW;
+        canvas.height = sliceH;
+
+        for (let i = 0; i < totalPages; i++) {
+          if (i > 0) pdf.addPage();
+          ctx.clearRect(0, 0, srcW, sliceH);
+          const sy = i * sliceH;
+          const sh = Math.min(sliceH, srcH - sy);
+          ctx.drawImage(img, 0, sy, srcW, sh, 0, 0, srcW, sh);
+          const pageData = canvas.toDataURL('image/png');
+          const pageImgH = contentW * (sh / srcW);
+          pdf.addImage(pageData, 'PNG', margin, margin, contentW, pageImgH);
+        }
+      }
+      pdf.save(filename);
     } catch (err) {
       console.error('PDF export failed:', err);
       alert('PDF export failed — please try again. Error: ' + err.message);
