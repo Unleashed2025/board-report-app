@@ -175,6 +175,9 @@ export function parseBoardPlan(workbook) {
         if (!id || (!id.startsWith('OPP-') && id !== 'Totals')) continue;
         if (id === 'Totals') break;
         const predMonth = row[tHeaders.indexOf('Predicted Sales Month')];
+        const billStart = row[tHeaders.indexOf('Predicted Billing Start Date')];
+        const parsedPredMonth = typeof predMonth === 'number' && predMonth > 40000 ? serialToMonthLabel(predMonth) : '';
+        const parsedBillStart = typeof billStart === 'number' && billStart > 40000 ? serialToMonthLabel(billStart) : '';
         deals.push({
           id,
           customer: String(row[tHeaders.indexOf('Customer')] || '').trim(),
@@ -186,7 +189,8 @@ export function parseBoardPlan(workbook) {
           revenue: toNum(row[tHeaders.indexOf('Revenue')]),
           cost: toNum(row[tHeaders.indexOf('Cost')]),
           profit: toNum(row[tHeaders.indexOf('Profit')]),
-          predictedMonth: typeof predMonth === 'number' && predMonth > 40000 ? serialToMonthLabel(predMonth) : '',
+          predictedMonth: parsedPredMonth,
+          billingStart: parsedBillStart || parsedPredMonth, // fall back to predicted month
         });
       }
     }
