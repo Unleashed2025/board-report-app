@@ -118,6 +118,7 @@ function BoardPlanDashboard({ boardPlan }) {
       const html2pdf = html2pdfModule.default || html2pdfModule;
       const tabLabel = activeTab === 'closedwon' ? 'Closed_Won_Report' : 'Board_Report';
       const dateStr = new Date().toISOString().split('T')[0];
+
       const opt = {
         margin: [8, 8, 8, 8],
         filename: `${tabLabel}_${dateStr}.pdf`,
@@ -128,6 +129,29 @@ function BoardPlanDashboard({ boardPlan }) {
           letterRendering: true,
           logging: false,
           backgroundColor: '#0D2338',
+          onclone: (clonedDoc) => {
+            // Tailwind v4 uses oklab() colors which html2canvas can't parse.
+            // Walk all elements and inline computed colors as hex/rgb fallbacks.
+            const allEls = clonedDoc.querySelectorAll('*');
+            const colorProps = ['color', 'background-color', 'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color', 'outline-color'];
+            allEls.forEach(el => {
+              const cs = window.getComputedStyle(el);
+              colorProps.forEach(prop => {
+                try {
+                  const val = cs.getPropertyValue(prop);
+                  if (val && val.includes('oklab')) {
+                    // Create a temp element to convert oklab to rgb
+                    const tmp = document.createElement('div');
+                    tmp.style.color = val;
+                    document.body.appendChild(tmp);
+                    const rgb = window.getComputedStyle(tmp).color;
+                    document.body.removeChild(tmp);
+                    el.style.setProperty(prop, rgb, 'important');
+                  }
+                } catch(e) { /* skip */ }
+              });
+            });
+          },
         },
         jsPDF: {
           unit: 'mm',
