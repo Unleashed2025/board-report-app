@@ -114,7 +114,8 @@ function BoardPlanDashboard({ boardPlan }) {
     if (!reportRef.current) return;
     setExporting(true);
     try {
-      const { default: html2pdf } = await import('html2pdf.js');
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
       const tabLabel = activeTab === 'closedwon' ? 'Closed_Won_Report' : 'Board_Report';
       const dateStr = new Date().toISOString().split('T')[0];
       const opt = {
@@ -138,7 +139,7 @@ function BoardPlanDashboard({ boardPlan }) {
       await html2pdf().set(opt).from(reportRef.current).save();
     } catch (err) {
       console.error('PDF export failed:', err);
-      window.print();
+      alert('PDF export failed — please try again. Error: ' + err.message);
     } finally {
       setExporting(false);
     }
