@@ -163,25 +163,42 @@ function analyseData(boardPlan, r78Data) {
   const domPct = totalSvcGP > 0 && domSvc ? domSvc.value / totalSvcGP : 0;
 
   // ── Narratives ──
+  // Use R78-weighted annual GP figures (not raw monthly sums which are misleading)
+  const cwOnlyTotalGP = r78Data?.cwOnlyTotalGP || 0;
+  const cwOnlyRecGP = r78Data?.cwOnlyRecGP || 0;
+  const cwOnlyNRGP = r78Data?.cwOnlyNRGP || 0;
+  const cwRecMonthly = closedWonDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
+  const cwNRTotal = closedWonDeals.filter(d => d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+
   const theGood = [], theBad = [], trends = [];
 
-  if (closedWonDeals.length > 0) theGood.push(`${closedWonDeals.length} deals closed and won, generating ${money(closedWonDeals.reduce((s, d) => s + d.profit, 0))} monthly GP — a confirmed revenue base.`);
-  if (netProfitTotal > 0) theGood.push(`Full forecast projects net profit of ${money(netProfitTotal)} for the year.`);
+  if (closedWonDeals.length > 0) {
+    // Show R78-weighted year contribution, not raw monthly sum
+    if (cwOnlyTotalGP > 0) {
+      theGood.push(`${closedWonDeals.length} deals closed and won. R78-weighted year contribution: ${money(cwOnlyTotalGP)} GP (${money(cwOnlyRecGP)} recurring + ${money(cwOnlyNRGP)} non-recurring). Current monthly recurring run-rate: ${money(cwRecMonthly)}/mo.`);
+    } else {
+      theGood.push(`${closedWonDeals.length} deals closed and won with ${money(cwRecMonthly)}/mo recurring GP and ${money(cwNRTotal)} non-recurring GP.`);
+    }
+  }
+  if (netProfitTotal > 0) theGood.push(`Full forecast (CW + Negotiating) projects net profit of ${money(netProfitTotal)} for the year — viable if negotiating deals land.`);
   if (breakevenMonth) theGood.push(`Recurring GP covers costs from ${breakevenMonth.month} — self-sustaining position reached.`);
-  if (avgGrowth > 0) theGood.push(`Recurring GP trending upward: avg. monthly growth of ${money(avgGrowth)}.`);
+  if (avgGrowth > 0) theGood.push(`Recurring GP trending upward with avg. monthly growth of ${money(avgGrowth)}.`);
   const strongReps = repPerformance.filter(r => r.pctTarget >= 60);
   if (strongReps.length > 0) theGood.push(`${strongReps.map(r => r.owner).join(' & ')} tracking above 60% of £24k target.`);
-  if (bigRecurring.length > 0) theGood.push(`${bigRecurring.length} high-value recurring deals (≥${money(MRR_HIGH)}/mo MRR) worth ${money(bigRecurring.reduce((s, d) => s + d.profit, 0))}/mo GP.`);
+  if (bigRecurring.length > 0) theGood.push(`${bigRecurring.length} high-value recurring deals (≥${money(MRR_HIGH)}/mo MRR) in the pipeline.`);
   if (mdfTotal > 0) theGood.push(`MDF contributes ${money(mdfTotal)} as an additional profit buffer.`);
 
   if (netProfitTotal < 0) theBad.push(`Forecast shows net loss of ${money(netProfitTotal)}. Cost control and pipeline conversion are critical.`);
-  const cwOnlyGross = (r78Data?.cwOnlyTotalGP || 0) - totalCostTotal;
-  if (cwOnlyGross < 0 && r78Data?.cwOnlyTotalGP) theBad.push(`Closed/Won-only basis runs at ${money(cwOnlyGross)} loss. Reliant on closing negotiating pipeline.`);
+  const cwOnlyGross = cwOnlyTotalGP - totalCostTotal;
+  if (cwOnlyGross < 0 && cwOnlyTotalGP > 0) theBad.push(`On Closed/Won-only basis (R78-weighted), the year-end position is a ${money(Math.abs(cwOnlyGross))} loss. We need negotiating deals to close to break even.`);
   const weakReps = repPerformance.filter(r => r.pctTarget < 30 && r.dealCount > 0);
   if (weakReps.length > 0) theBad.push(`${weakReps.map(r => r.owner).join(' & ')} below 30% of £24k target — action plans needed.`);
-  const negGP = negotiatingDeals.reduce((s, d) => s + d.profit, 0);
-  const cwGP = closedWonDeals.reduce((s, d) => s + d.profit, 0);
-  if (negotiatingDeals.length > 3 && negGP > 0) theBad.push(`${negotiatingDeals.length} deals (${money(negGP)}/mo GP) still in negotiation — ${pct(negGP / (cwGP + negGP))} of forecast GP at risk.`);
+  const negGPMonthly = negotiatingDeals.reduce((s, d) => s + d.profit, 0);
+  if (negotiatingDeals.length > 3 && negGPMonthly > 0) {
+    const totalForecastGP = totalGPTotal;
+    const negPctOfForecast = totalForecastGP > 0 ? negGPMonthly * 12 / totalForecastGP : 0;
+    theBad.push(`${negotiatingDeals.length} deals still in negotiation (${money(negGPMonthly)}/mo run-rate). A significant portion of forecast GP depends on these closing.`);
+  }
   if (!breakevenMonth) theBad.push(`Recurring GP doesn't cover costs in forecast period — reliant on non-recurring revenue.`);
 
   const totalPCount = pipelineRecurring.length;
