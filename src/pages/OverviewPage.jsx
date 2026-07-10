@@ -867,14 +867,15 @@ function BoardPlanDashboard({ boardPlan }) {
           const fullGrossProfit = grossProfitTotal;
           const fullNetProfit = netProfitTotal;
 
-          const ScenarioCard = ({ label, borderColor, bgColor, textColor, gp, cost, gross, net }) => (
+          const ScenarioCard = ({ label, borderColor, bgColor, textColor, gp, cost, gross, mdf, net }) => (
             <div className={`rounded-xl border-2 ${borderColor} ${bgColor} p-5`}>
               <p className={`text-sm font-bold ${textColor} mb-3`}>{label}</p>
               <div className="space-y-2">
                 <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Total GP</span><span className="text-sm font-bold text-[#0EA5E9]">{money(gp)}</span></div>
                 <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Total Costs</span><span className="text-sm font-bold text-[#ef4444]">{money(cost)}</span></div>
                 <div className="border-t border-[#2A4A6F] pt-2 flex justify-between"><span className="text-xs text-[#A0B4C8]">Gross Profit</span><span className={`text-sm font-bold ${gross >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(gross)}</span></div>
-                <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">Net Profit / EBITDA</span><span className={`text-sm font-bold ${net >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(net)}</span></div>
+                {mdf ? <div className="flex justify-between"><span className="text-xs text-[#A0B4C8]">MDF Offset</span><span className="text-sm font-bold text-[#8b5cf6]">+{money(mdf)}</span></div> : null}
+                <div className="border-t border-[#2A4A6F] pt-2 flex justify-between"><span className="text-xs font-semibold text-[#A0B4C8]">Net Profit</span><span className={`text-sm font-bold ${net >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(net)}</span></div>
               </div>
             </div>
           );
@@ -907,12 +908,12 @@ function BoardPlanDashboard({ boardPlan }) {
             <ScenarioCard
               label="✅ Closed/Won Only (Confirmed)"
               borderColor="border-[#059669]" bgColor="bg-[#059669]/5" textColor="text-[#059669]"
-              gp={cwOnlyTotalGP} cost={totalCostTotal} gross={cwOnlyGrossProfit} net={cwOnlyNetProfit}
+              gp={cwOnlyTotalGP} cost={totalCostTotal} gross={cwOnlyGrossProfit} mdf={mdfTotal} net={cwOnlyNetProfit}
             />
             <ScenarioCard
               label="📊 Full Forecast (CW + Negotiating)"
               borderColor="border-[#0EA5E9]" bgColor="bg-[#0EA5E9]/5" textColor="text-[#0EA5E9]"
-              gp={fullTotalGP} cost={totalCostTotal} gross={fullGrossProfit} net={fullNetProfit}
+              gp={fullTotalGP} cost={totalCostTotal} gross={fullGrossProfit} mdf={mdfTotal} net={fullNetProfit}
             />
             <div className="rounded-xl border-2 border-[#f59e0b] bg-[#f59e0b]/5 p-5">
               <p className="text-sm font-bold text-[#f59e0b] mb-3">⚠️ Pipeline Gap (At Risk)</p>
@@ -964,6 +965,18 @@ function BoardPlanDashboard({ boardPlan }) {
                   <td className={`py-2 text-right ${cwOnlyGrossProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(cwOnlyGrossProfit)}</td>
                   <td className="py-2 text-right text-[#f59e0b]">+{money(negTotalGP)}</td>
                   <td className={`py-2 text-right ${fullGrossProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(fullGrossProfit)}</td>
+                </tr>
+                {mdfTotal ? <tr className="border-b border-[#2A4A6F]/30 text-white">
+                  <td className="py-1.5">MDF Offset</td>
+                  <td className="py-1.5 text-right text-[#8b5cf6]">+{money(mdfTotal)}</td>
+                  <td className="py-1.5 text-right text-[#5A7A95]">—</td>
+                  <td className="py-1.5 text-right text-[#8b5cf6]">+{money(mdfTotal)}</td>
+                </tr> : null}
+                <tr className="border-t-2 border-[#059669] text-white font-bold">
+                  <td className="py-2">Net Profit</td>
+                  <td className={`py-2 text-right ${cwOnlyNetProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(cwOnlyNetProfit)}</td>
+                  <td className="py-2 text-right text-[#f59e0b]">+{money(negTotalGP)}</td>
+                  <td className={`py-2 text-right ${fullNetProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(fullNetProfit)}</td>
                 </tr>
               </tbody>
             </table>
