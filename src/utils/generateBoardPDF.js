@@ -14,9 +14,10 @@ const BRAND = {
 };
 
 const money = (v) => {
-  if (v == null || isNaN(v)) return '£0';
+  if (v == null || isNaN(v)) return '\u00A30';
   const abs = Math.abs(v);
-  return (v < 0 ? '-£' : '£') + abs.toLocaleString('en-GB', { maximumFractionDigits: 0 });
+  const formatted = abs.toLocaleString('en-GB', { maximumFractionDigits: 0 });
+  return (v < 0 ? '-\u00A3' : '\u00A3') + formatted;
 };
 
 const pct = (v) => (v * 100).toFixed(1) + '%';
@@ -430,30 +431,31 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
 
   // ── Deals Bridging the Gap table ──
   if (analysis.gapBridgeDeals.length > 0 && analysis.gap > 0) {
-    heading('Deals Bridging the Gap', `CW GP: ${money(analysis.cwOnlyTotalGP)} | Costs: ${money(analysis.totalCostTotal)} | Gap: ${money(analysis.gap)} — these negotiating deals must close AND deliver to reach profitability`);
+    heading('Deals Bridging the Gap', `CW GP: ${money(analysis.cwOnlyTotalGP)} | Costs: ${money(analysis.totalCostTotal)} | Gap: ${money(analysis.gap)} -- these negotiating deals must close AND deliver to reach profitability`);
     const gapRows = analysis.gapBridgeDeals.map(d => {
-      const deliveryCol = d.deliveryDays > 0 ? `${d.deliveryDays}d` : '—';
-      const riskFlag = d.hasDeliveryRisk ? ' ⚠' : '';
+      const deliveryCol = d.deliveryDays > 0 ? `${d.deliveryDays}d` : '-';
+      const riskFlag = d.hasDeliveryRisk ? ' !' : '';
+      const desc = d.description.length > 30 ? d.description.substring(0, 28) + '..' : d.description;
       return [
         d.customer,
+        desc || d.dealType,
         d.dealType,
         { text: money(d.monthlyGP), align: 'right' },
         d.expectedClose,
         deliveryCol + riskFlag,
-        d.billingStart,
       ];
     });
     const totalNegGP = analysis.gapBridgeDeals.reduce((s, d) => s + d.monthlyGP, 0);
     gapRows.push([
       { text: 'TOTAL', bold: true },
-      '',
+      '', '',
       { text: money(totalNegGP), align: 'right', bold: true },
-      '', '', '',
+      '', '',
     ]);
     y = drawTable(pdf, y, margin, contentW,
-      ['Customer', 'Type', { text: 'Mo. GP', align: 'right' }, 'Close', 'Delivery', 'Bills From'],
+      ['Customer', 'Description', 'Type', { text: 'Mo. GP', align: 'right' }, 'Close', 'Delivery'],
       gapRows,
-      { headColor: [180, 40, 40], colWidths: [42, 22, 28, 28, 25, 28], pageH }
+      { headColor: [180, 40, 40], colWidths: [32, 42, 22, 25, 28, 22], fontSize: 8, pageH }
     );
 
     // Delivery risk footnote
@@ -461,7 +463,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     if (atRisk.length > 0) {
       y += 2;
       pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(...BRAND.red);
-      const riskNote = `⚠ Delivery risk: ${atRisk.map(d => d.customer).join(', ')} — billing may not start before Dec 2026. VCTo audits require 120 days, migrations 50-60 days.`;
+      const riskNote = `! Delivery risk: ${atRisk.map(d => d.customer).join(', ')} -- billing may not start before Dec 2026. VCTo audits require 120 days, migrations 50-60 days.`;
       const riskLines = pdf.splitTextToSize(riskNote, contentW);
       riskLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
       pdf.setFont('helvetica', 'normal');
@@ -537,6 +539,55 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   );
 
   // ═══════════════════════════════════════════════════════════════════
+  // JANUARY STARTING POSITION
+  // ═══════════════════════════════════════════════════════════════════
+  y += 6;
+  ensureSpace(60);
+  heading('January ' + (new Date().getFullYear() + 1) + ' Starting Position', 'Monthly recurring GP vs monthly costs entering the new year');
+
+  const cwRecMonthlyGP = boardPlan.closedWonDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
+  const cwRecMonthlyRev = boardPlan.closedWonDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.revenue, 0);
+  const negRecDeals = boardPlan.negotiatingDeals.filter(d => d.dealType === 'Recurring');
+  const negRecMonthlyGP = negRecDeals.reduce((s, d) => s + d.profit, 0);
+  const negRecMonthlyRev = negRecDeals.reduce((s, d) => s + d.revenue, 0);
+  const totalRecMonthlyGP = cwRecMonthlyGP + negRecMonthlyGP;
+  const totalRecMonthlyRev = cwRecMonthlyRev + negRecMonthlyRev;
+  const monthlyCostJan = boardPlan.totalCostTotal / 12;
+  const cwMonthlyGapJan = cwRecMonthlyGP - monthlyCostJan;
+  const forecastMonthlyGapJan = totalRecMonthlyGP - monthlyCostJan;
+
+  const janRows = [
+    ['CW Recurring Revenue', { text: money(cwRecMonthlyRev) + '/mo', align: 'right' }, { text: '-', align: 'right' }, { text: money(cwRecMonthlyRev) + '/mo', align: 'right' }],
+    ['CW Recurring GP', { text: money(cwRecMonthlyGP) + '/mo', align: 'right', color: BRAND.green }, { text: '-', align: 'right' }, { text: money(cwRecMonthlyGP) + '/mo', align: 'right', color: BRAND.green }],
+    ['+ Negotiating Recurring Revenue', { text: '-', align: 'right' }, { text: money(negRecMonthlyRev) + '/mo', align: 'right', color: BRAND.amber }, { text: money(totalRecMonthlyRev) + '/mo', align: 'right' }],
+    ['+ Negotiating Recurring GP', { text: '-', align: 'right' }, { text: money(negRecMonthlyGP) + '/mo', align: 'right', color: BRAND.amber }, { text: money(totalRecMonthlyGP) + '/mo', align: 'right', color: BRAND.green }],
+    [{ text: 'Monthly Costs', bold: true }, { text: money(monthlyCostJan) + '/mo', align: 'right', color: BRAND.red }, { text: '-', align: 'right' }, { text: money(monthlyCostJan) + '/mo', align: 'right', color: BRAND.red }],
+    [{ text: 'Monthly Surplus / (Gap)', bold: true },
+      { text: money(cwMonthlyGapJan) + '/mo', align: 'right', bold: true, color: cwMonthlyGapJan >= 0 ? BRAND.green : BRAND.red },
+      { text: '+' + money(negRecMonthlyGP), align: 'right', color: BRAND.amber },
+      { text: money(forecastMonthlyGapJan) + '/mo', align: 'right', bold: true, color: forecastMonthlyGapJan >= 0 ? BRAND.green : BRAND.red }],
+    [{ text: 'Annualised Surplus / (Gap)', bold: true },
+      { text: money(cwMonthlyGapJan * 12), align: 'right', bold: true, color: cwMonthlyGapJan >= 0 ? BRAND.green : BRAND.red },
+      { text: '', align: 'right' },
+      { text: money(forecastMonthlyGapJan * 12), align: 'right', bold: true, color: forecastMonthlyGapJan >= 0 ? BRAND.green : BRAND.red }],
+  ];
+
+  y = drawTable(pdf, y, margin, contentW,
+    ['Metric', { text: 'CW Only', align: 'right' }, { text: '+ Negotiating', align: 'right' }, { text: 'Forecast Total', align: 'right' }],
+    janRows,
+    { headColor: BRAND.accent, colWidths: [55, 35, 35, 40], pageH }
+  );
+  y += 3;
+
+  // Summary narrative
+  pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+  const janNarrative = cwMonthlyGapJan < 0
+    ? `On confirmed deals alone, we enter January ${money(Math.abs(cwMonthlyGapJan))}/mo short of breakeven (${money(Math.abs(cwMonthlyGapJan * 12))}/yr). ${forecastMonthlyGapJan >= 0 ? `If all negotiating deals land, we start January in surplus at ${money(forecastMonthlyGapJan)}/mo.` : `Even with negotiating deals, still ${money(Math.abs(forecastMonthlyGapJan))}/mo short -- additional pipeline or cost reduction needed.`}`
+    : `Confirmed deals already cover monthly costs with ${money(cwMonthlyGapJan)}/mo surplus. Strong starting position for the new year.`;
+  const janLines = pdf.splitTextToSize(janNarrative, contentW);
+  janLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
+
+  // ═══════════════════════════════════════════════════════════════════
   // MONTHLY P&L
   // ═══════════════════════════════════════════════════════════════════
   pdf.addPage(); y = margin;
@@ -603,14 +654,17 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     const totGP = sec.deals.reduce((s, d) => s + d.profit, 0);
 
     y = drawTable(pdf, y, margin, contentW,
-      ['Customer', 'Rep', 'Type', { text: 'Revenue', align: 'right' }, { text: 'GP', align: 'right' }, 'Start'],
-      sec.deals.sort((a, b) => b.profit - a.profit).map(d => [
-        d.customer, d.owner, d.dealType,
-        { text: money(d.revenue), align: 'right' },
-        { text: money(d.profit), align: 'right', color: BRAND.green },
-        d.billingStart || d.predictedMonth || '—',
-      ]),
-      { headColor: sec.color, fontSize: 8, rowHeight: 6, colWidths: [42, 26, 25, 26, 22, 26], footRow: ['TOTAL', '', '', money(totRev), money(totGP), ''], pageH }
+      ['Customer', 'Description', 'Type', { text: 'Revenue', align: 'right' }, { text: 'GP', align: 'right' }, 'Start'],
+      sec.deals.sort((a, b) => b.profit - a.profit).map(d => {
+        const desc = (d.description || '').length > 25 ? d.description.substring(0, 23) + '..' : (d.description || '-');
+        return [
+          d.customer, desc, d.dealType,
+          { text: money(d.revenue), align: 'right' },
+          { text: money(d.profit), align: 'right', color: BRAND.green },
+          d.billingStart || d.predictedMonth || '-',
+        ];
+      }),
+      { headColor: sec.color, fontSize: 7, rowHeight: 6, colWidths: [30, 36, 20, 24, 22, 24], footRow: ['TOTAL', '', '', money(totRev), money(totGP), ''], pageH }
     );
     y += 4;
   }

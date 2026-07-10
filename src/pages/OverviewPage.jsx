@@ -970,18 +970,20 @@ function BoardPlanDashboard({ boardPlan }) {
           <div className="border-t border-[#2A4A6F] pt-4">
             <h3 className="text-sm font-bold text-white mb-3">Deal Pipeline Status</h3>
             <p className="text-xs text-[#A0B4C8] mb-3">
-              {closedWonCount} deals are confirmed Closed/Won, {negotiatingCount} are in negotiation. The gap between confirmed and full forecast is {money(negTotalGP)} GP still at risk.
+              {closedWonCount} deals are confirmed Closed/Won ({money(cwOnlyTotalGP)} R78-weighted GP), {negotiatingCount} are in negotiation ({money(negTotalGP)} R78-weighted GP). The gap between confirmed and full forecast is {money(negTotalGP)} GP still at risk.
             </p>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-lg border border-[#059669]/30 bg-[#059669]/5 p-3">
                 <p className="text-[10px] text-[#059669] font-semibold uppercase tracking-wide">Closed / Won</p>
                 <p className="text-lg font-bold text-white mt-1">{closedWonCount} deals</p>
-                <p className="text-xs text-[#5A7A95]">GP: {money(closedWonDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+                <p className="text-xs text-[#059669]">R78 GP: {money(cwOnlyTotalGP)}</p>
+                <p className="text-[10px] text-[#5A7A95]">({money(cwOnlyRecGP)} rec + {money(cwOnlyNRGP)} NR)</p>
               </div>
               <div className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-3">
                 <p className="text-[10px] text-[#f59e0b] font-semibold uppercase tracking-wide">Negotiating</p>
                 <p className="text-lg font-bold text-white mt-1">{negotiatingCount} deals</p>
-                <p className="text-xs text-[#5A7A95]">GP: {money(negotiatingDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+                <p className="text-xs text-[#f59e0b]">R78 GP: {money(negTotalGP)}</p>
+                <p className="text-[10px] text-[#5A7A95]">({money(negRecGP)} rec + {money(negNRGP)} NR)</p>
               </div>
               <div className="rounded-lg border border-[#8b5cf6]/30 bg-[#8b5cf6]/5 p-3">
                 <p className="text-[10px] text-[#8b5cf6] font-semibold uppercase tracking-wide">Quoting</p>
