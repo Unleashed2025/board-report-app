@@ -1010,10 +1010,11 @@ function BoardPlanDashboard({ boardPlan }) {
               const negRecGPm = negRec.reduce((s, d) => s + d.profit, 0);
               const totalRecRev = cwRecRev + negRecRev;
               const totalRecGP = cwRecGP + negRecGPm;
-              const annualRecGP = totalRecGP * 12;
               const monthlyCost = totalCostTotal / 12;
+              const cwMonthlyGap = cwRecGP - monthlyCost;
+              const forecastMonthlyGap = totalRecGP - monthlyCost;
 
-              return (
+              return (<>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-4">
                   <div className="rounded-xl border-2 border-[#059669] bg-[#059669]/5 p-4">
                     <p className="text-[10px] text-[#059669] font-semibold uppercase tracking-wide mb-2">CW Monthly Recurring</p>
@@ -1036,23 +1037,75 @@ function BoardPlanDashboard({ boardPlan }) {
                     <p className="text-xs text-[#A0B4C8] mt-1">GP</p>
                     <p className="text-lg font-bold text-[#0EA5E9]">{money(totalRecGP)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
                   </div>
-                  <div className="rounded-xl border-2 border-[#8b5cf6] bg-[#8b5cf6]/5 p-4">
-                    <p className="text-[10px] text-[#8b5cf6] font-semibold uppercase tracking-wide mb-2">Annualised ({currentYear + 1})</p>
-                    <p className="text-xs text-[#A0B4C8]">Annual Recurring GP</p>
-                    <p className="text-lg font-bold text-white">{money(annualRecGP)}</p>
-                    <p className="text-xs text-[#A0B4C8] mt-1">vs Annual Costs ({money(totalCostTotal)})</p>
-                    <p className={`text-lg font-bold ${annualRecGP - totalCostTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>
-                      {annualRecGP - totalCostTotal >= 0 ? '+' : ''}{money(annualRecGP - totalCostTotal)}
-                    </p>
+                  <div className="rounded-xl border-2 border-[#ef4444] bg-[#ef4444]/5 p-4">
+                    <p className="text-[10px] text-[#ef4444] font-semibold uppercase tracking-wide mb-2">Monthly Costs</p>
+                    <p className="text-xs text-[#A0B4C8]">From Figures Sheet</p>
+                    <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCost)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
+                    <p className="text-xs text-[#A0B4C8] mt-1">Annual</p>
+                    <p className="text-lg font-bold text-[#ef4444]">{money(totalCostTotal)}</p>
                   </div>
                 </div>
-              );
+
+                {/* Monthly Profitability Gap */}
+                <div className="grid gap-4 sm:grid-cols-2 mb-4">
+                  <div className={`rounded-xl border-2 p-5 ${cwMonthlyGap >= 0 ? 'border-[#059669] bg-[#059669]/5' : 'border-[#ef4444] bg-[#ef4444]/5'}`}>
+                    <p className="text-xs font-bold text-white mb-1">CW Only: Monthly GP vs Costs</p>
+                    <div className="flex items-end gap-3">
+                      <div>
+                        <p className="text-[10px] text-[#A0B4C8]">Monthly Recurring GP</p>
+                        <p className="text-lg font-bold text-[#059669]">{money(cwRecGP)}</p>
+                      </div>
+                      <p className="text-lg text-[#5A7A95] font-light">vs</p>
+                      <div>
+                        <p className="text-[10px] text-[#A0B4C8]">Monthly Costs</p>
+                        <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCost)}</p>
+                      </div>
+                      <p className="text-lg text-[#5A7A95] font-light">=</p>
+                      <div>
+                        <p className="text-[10px] text-[#A0B4C8]">{cwMonthlyGap >= 0 ? 'Monthly Surplus' : 'Monthly Gap'}</p>
+                        <p className={`text-2xl font-bold ${cwMonthlyGap >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{cwMonthlyGap >= 0 ? '+' : ''}{money(cwMonthlyGap)}</p>
+                      </div>
+                    </div>
+                    {cwMonthlyGap < 0 && (
+                      <p className="text-xs text-[#ef4444] mt-2">⚠ We need {money(Math.abs(cwMonthlyGap))}/mo more recurring GP from confirmed deals to break even monthly</p>
+                    )}
+                  </div>
+                  <div className={`rounded-xl border-2 p-5 ${forecastMonthlyGap >= 0 ? 'border-[#059669] bg-[#059669]/5' : 'border-[#f59e0b] bg-[#f59e0b]/5'}`}>
+                    <p className="text-xs font-bold text-white mb-1">Forecast (CW + Neg): Monthly GP vs Costs</p>
+                    <div className="flex items-end gap-3">
+                      <div>
+                        <p className="text-[10px] text-[#A0B4C8]">Monthly Recurring GP</p>
+                        <p className="text-lg font-bold text-[#0EA5E9]">{money(totalRecGP)}</p>
+                      </div>
+                      <p className="text-lg text-[#5A7A95] font-light">vs</p>
+                      <div>
+                        <p className="text-[10px] text-[#A0B4C8]">Monthly Costs</p>
+                        <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCost)}</p>
+                      </div>
+                      <p className="text-lg text-[#5A7A95] font-light">=</p>
+                      <div>
+                        <p className="text-[10px] text-[#A0B4C8]">{forecastMonthlyGap >= 0 ? 'Monthly Surplus' : 'Monthly Gap'}</p>
+                        <p className={`text-2xl font-bold ${forecastMonthlyGap >= 0 ? 'text-[#059669]' : 'text-[#f59e0b]'}`}>{forecastMonthlyGap >= 0 ? '+' : ''}{money(forecastMonthlyGap)}</p>
+                      </div>
+                    </div>
+                    {forecastMonthlyGap >= 0 ? (
+                      <p className="text-xs text-[#059669] mt-2">✅ If all negotiating deals land, we enter January profitable at {money(forecastMonthlyGap)}/mo surplus</p>
+                    ) : (
+                      <p className="text-xs text-[#f59e0b] mt-2">⚠ Even with negotiating deals, still {money(Math.abs(forecastMonthlyGap))}/mo short — need additional pipeline or cost reduction</p>
+                    )}
+                  </div>
+                </div>
+              </>);
             })()}
             <div className="rounded-lg bg-[#0D2338] border border-[#2A4A6F] p-3 mb-4">
               <p className="text-xs text-[#A0B4C8] leading-relaxed">
                 <span className="font-semibold text-white">What this means:</span>{' '}
-                Entering January {currentYear + 1}, our confirmed recurring base is <strong className="text-[#059669]">{money(cwRecurring.reduce((s, d) => s + d.profit, 0))}/mo GP</strong>.
-                If all negotiating deals close and deliver, we start at <strong className="text-[#0EA5E9]">{money(cwRecurring.reduce((s, d) => s + d.profit, 0) + negotiatingDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0))}/mo GP</strong> — giving us a full-year run-rate before any new business.
+                Entering January {currentYear + 1}, our confirmed recurring base is <strong className="text-[#059669]">{money(cwRecurring.reduce((s, d) => s + d.profit, 0))}/mo GP</strong> against <strong className="text-[#ef4444]">{money(totalCostTotal / 12)}/mo costs</strong>.
+                {cwRecurring.reduce((s, d) => s + d.profit, 0) < totalCostTotal / 12
+                  ? <> That leaves a <strong className="text-[#ef4444]">{money(totalCostTotal / 12 - cwRecurring.reduce((s, d) => s + d.profit, 0))}/mo gap</strong> on confirmed deals alone. </>
+                  : <> Confirmed deals cover monthly costs. </>
+                }
+                If all negotiating deals close and deliver, we start at <strong className="text-[#0EA5E9]">{money(cwRecurring.reduce((s, d) => s + d.profit, 0) + negotiatingDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0))}/mo GP</strong>.
                 Additional NR projects and new pipeline in {currentYear + 1} would build on top of this base.
               </p>
             </div>
