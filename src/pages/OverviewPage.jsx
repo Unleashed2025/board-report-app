@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import Layout from '../components/Layout';
 import { useData } from '../data/DataContext.jsx';
+import { generateBoardPDF } from '../utils/generateBoardPDF.js';
 
 const CORRECT_PASS = 'IamAseniorLeader!%!';
 const SESSION_KEY = 'overview_auth';
@@ -110,79 +111,6 @@ function BoardPlanDashboard({ boardPlan }) {
   const [cwPeriod, setCwPeriod] = useState('all');
   const reportRef = useRef(null);
 
-  const handleExportPDF = useCallback(async () => {
-    if (!reportRef.current) return;
-    setExporting(true);
-    try {
-      // Use html-to-image (SVG foreignObject) instead of html2canvas
-      // to avoid Tailwind v4 oklab() color parsing failures.
-      const { toPng } = await import('html-to-image');
-      const { default: jsPDF } = await import('jspdf');
-
-      const tabLabel = activeTab === 'closedwon' ? 'Closed_Won_Report' : 'Board_Report';
-      const dateStr = new Date().toISOString().split('T')[0];
-      const filename = `${tabLabel}_${dateStr}.pdf`;
-
-      const el = reportRef.current;
-      const pxWidth = el.scrollWidth;
-      const pxHeight = el.scrollHeight;
-
-      // Render to PNG using the browser's native rendering (handles oklab)
-      const dataUrl = await toPng(el, {
-        quality: 0.95,
-        pixelRatio: 2,
-        backgroundColor: '#0D2338',
-      });
-
-      // A4 dimensions in mm
-      const pageW = 210;
-      const pageH = 297;
-      const margin = 8;
-      const contentW = pageW - margin * 2;
-      const contentH = pageH - margin * 2;
-
-      // Scale image to fit A4 width
-      const imgAspect = pxHeight / pxWidth;
-      const scaledH = contentW * imgAspect;
-
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-
-      // If content fits one page, simple add; otherwise split across pages
-      if (scaledH <= contentH) {
-        pdf.addImage(dataUrl, 'PNG', margin, margin, contentW, scaledH);
-      } else {
-        // Multi-page: slice the image across pages
-        const totalPages = Math.ceil(scaledH / contentH);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
-
-        const srcW = img.width;
-        const srcH = img.height;
-        const sliceH = Math.floor(srcH / totalPages);
-        canvas.width = srcW;
-        canvas.height = sliceH;
-
-        for (let i = 0; i < totalPages; i++) {
-          if (i > 0) pdf.addPage();
-          ctx.clearRect(0, 0, srcW, sliceH);
-          const sy = i * sliceH;
-          const sh = Math.min(sliceH, srcH - sy);
-          ctx.drawImage(img, 0, sy, srcW, sh, 0, 0, srcW, sh);
-          const pageData = canvas.toDataURL('image/png');
-          const pageImgH = contentW * (sh / srcW);
-          pdf.addImage(pageData, 'PNG', margin, margin, contentW, pageImgH);
-        }
-      }
-      pdf.save(filename);
-    } catch (err) {
-      console.error('PDF export failed:', err);
-      alert('PDF export failed — please try again. Error: ' + err.message);
-    } finally {
-      setExporting(false);
-    }
-  }, [activeTab]);
   const {
     monthlyData, costBreakdown, gpByServiceType, gpByRep, employeeCosts,
     closedTotalGP, closedRecurringGP, closedNonRecurringGP,
@@ -364,6 +292,22 @@ function BoardPlanDashboard({ boardPlan }) {
   const negRecWithR78FY = negRecurring.map(d => ({ ...d, r78: calcRule78GP(d, 'fy') }));
   const combinedR78Cal = [...cwRecWithR78Cal, ...negRecWithR78Cal];
   const combinedR78FY = [...cwRecWithR78FY, ...negRecWithR78FY];
+
+  // PDF export handler — uses jsPDF directly, downloads the file
+  const handleExportPDF = useCallback(async () => {
+    setExporting(true);
+    try {
+      const cwOnlyRecGP = cwRecWithR78Cal.reduce((s, d) => s + d.r78.resultGP, 0);
+      const cwOnlyNRGP = cwNonRecurring.reduce((s, d) => s + d.profit, 0);
+      const cwOnlyTotalGP = cwOnlyRecGP + cwOnlyNRGP;
+      await generateBoardPDF(boardPlan, { cwOnlyRecGP, cwOnlyNRGP, cwOnlyTotalGP });
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('PDF export failed: ' + err.message);
+    } finally {
+      setExporting(false);
+    }
+  }, [boardPlan, cwRecWithR78Cal, cwNonRecurring]);
 
   // Period filter helpers for Closed Won
   const cwFilterMonthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
