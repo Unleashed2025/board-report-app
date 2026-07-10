@@ -1,5 +1,4 @@
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 const BRAND = {
   navy: [13, 35, 56],
@@ -210,6 +209,9 @@ function analyseData(boardPlan, r78Data) {
 // ─── PDF Generator ───────────────────────────────────────────────────────────
 
 export async function generateBoardPDF(boardPlan, r78Data = {}) {
+  // Dynamic import of jspdf-autotable to avoid Rolldown static resolution issues
+  const { default: autoTable } = await import('jspdf-autotable');
+
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW = 210;
   const pageH = 297;
