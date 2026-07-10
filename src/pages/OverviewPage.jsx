@@ -192,12 +192,12 @@ function BoardPlanDashboard({ boardPlan }) {
   const calToFyPos = (mi) => (mi + 3) % 12; // Oct(9)→0, Nov(10)→1, ..., Sep(8)→11
 
   const calcRule78GP = (deal, mode = 'year') => {
-    if (deal.dealType !== 'Recurring' || !deal.billingStart) return { annualGP: deal.profit * 12, calYearGP: 0, fyGP: 0, monthsActive: 0, weight: 0 };
+    if (deal.dealType !== 'Recurring' || !deal.billingStart) return { annualGP: deal.profit * 12, calYearGP: 0, fyGP: 0, resultGP: 0, monthsActive: 0, weight: 0, startMonth: '' };
     const annualGP = deal.profit * 12;
     const parts = String(deal.billingStart).split(' ');
     const mi = monthNames78.indexOf(parts[0]);
     const yr = parseInt(parts[1]);
-    if (mi === -1 || isNaN(yr)) return { annualGP, calYearGP: 0, fyGP: 0, monthsActive: 0, weight: 0, startMonth: '?', startYear: yr };
+    if (mi === -1 || isNaN(yr)) return { annualGP, calYearGP: 0, fyGP: 0, resultGP: 0, monthsActive: 0, weight: 0, startMonth: '?', startYear: yr };
 
     // Calendar year R78
     let calWeight = 0, calMonths = 0;
