@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 const BRAND = {
   navy: [13, 35, 56],
@@ -409,7 +409,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   y += 4;
 
   sectionHeading('Recurring Deal Size Distribution', 'Pipeline breakdown by monthly recurring revenue band');
-  pdf.autoTable({
+  autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin },
     head: [['Deal Size Band', 'Count', 'Monthly GP', '% of Recurring']],
@@ -424,7 +424,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
 
   if (analysis.nrSizeDistribution.some(r => r.count > 0)) {
     sectionHeading('Non-Recurring Deal Size Distribution', 'Project/one-off deal breakdown');
-    pdf.autoTable({
+    autoTable(pdf, {
       startY: y,
       margin: { left: margin, right: margin },
       head: [['Deal Size Band', 'Count', 'GP', '% of NR']],
@@ -458,7 +458,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   const cwOnlyGross = cwOnlyTotalGP - boardPlan.totalCostTotal;
   const cwOnlyNet = cwOnlyGross + (boardPlan.mdfTotal || 0);
 
-  pdf.autoTable({
+  autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin },
     head: [['Metric', 'Closed/Won Only', 'Full Forecast', 'Variance']],
@@ -493,7 +493,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   y = pdf.lastAutoTable.finalY + 10;
 
   sectionHeading('Annual Cost Breakdown', 'Business operating costs');
-  pdf.autoTable({
+  autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin },
     head: [['Cost Category', 'Annual Amount']],
@@ -529,7 +529,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
 
   sectionHeading('Month-by-Month Breakdown', 'From Business Plan figures — CW + Negotiating deals');
 
-  pdf.autoTable({
+  autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin },
     head: [['Month', 'Rec. GP', 'NR GP', 'Total GP', 'Costs', 'Net Profit', 'EBITDA', 'Cumulative']],
@@ -569,7 +569,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   ensureSpace(60);
   sectionHeading('Sales Rep Performance', 'Target: £24,000 monthly recurring GP per rep');
 
-  pdf.autoTable({
+  autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin },
     head: [['Rep', 'Deals', 'CW Rec. GP', 'Total GP', '% Target', 'Cost', 'ROI']],
@@ -619,7 +619,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     const totalRev = section.deals.reduce((s, d) => s + d.revenue, 0);
     const totalGP = section.deals.reduce((s, d) => s + d.profit, 0);
 
-    pdf.autoTable({
+    autoTable(pdf, {
       startY: y,
       margin: { left: margin, right: margin },
       head: [['Customer', 'Rep', 'Type', 'Service', 'Revenue', 'GP', 'Start']],
@@ -646,7 +646,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     ensureSpace(40);
     sectionHeading('GP by Service Type', 'Non-recurring gross profit breakdown');
     const totalSvcGP = boardPlan.gpByServiceType.reduce((s, st) => s + st.value, 0);
-    pdf.autoTable({
+    autoTable(pdf, {
       startY: y,
       margin: { left: margin, right: margin },
       head: [['Service Type', 'GP', '% of Total']],
