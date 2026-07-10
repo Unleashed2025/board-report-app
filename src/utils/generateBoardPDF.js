@@ -16,30 +16,114 @@ const BRAND = {
 const money = (v) => {
   if (v == null || isNaN(v)) return '£0';
   const abs = Math.abs(v);
-  const prefix = v < 0 ? '-£' : '£';
-  return prefix + abs.toLocaleString('en-GB', { maximumFractionDigits: 0 });
+  return (v < 0 ? '-£' : '£') + abs.toLocaleString('en-GB', { maximumFractionDigits: 0 });
 };
 
 const pct = (v) => (v * 100).toFixed(1) + '%';
 
-// ─── Narrative Analysis Engine ───────────────────────────────────────────────
+// ── Manual table drawing (no jspdf-autotable dependency) ─────────────────────
+
+function drawTable(pdf, startY, margin, contentW, head, body, opts = {}) {
+  const { headColor = BRAND.accent, fontSize = 9, rowHeight = 7, colWidths, footRow, pageH = 297 } = opts;
+  const cols = head.length;
+  const autoW = contentW / cols;
+  const widths = colWidths || head.map(() => autoW);
+  let y = startY;
+
+  const ensurePage = (needed) => {
+    if (y + needed > pageH - 20) {
+      pdf.addPage();
+      y = 15;
+    }
+  };
+
+  // Header
+  ensurePage(rowHeight + 2);
+  pdf.setFillColor(...headColor);
+  pdf.rect(margin, y - 1, contentW, rowHeight + 1, 'F');
+  pdf.setFontSize(fontSize);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(...BRAND.white);
+  let x = margin + 2;
+  head.forEach((h, i) => {
+    const align = typeof h === 'object' ? h.align : 'left';
+    const text = typeof h === 'object' ? h.text : h;
+    if (align === 'right') {
+      pdf.text(text, margin + widths.slice(0, i + 1).reduce((s, w) => s + w, 0) - 2, y + 4, { align: 'right' });
+    } else {
+      pdf.text(text, x, y + 4);
+    }
+    x += widths[i];
+  });
+  y += rowHeight + 1;
+
+  // Body rows
+  pdf.setFont('helvetica', 'normal');
+  body.forEach((row, ri) => {
+    ensurePage(rowHeight);
+    if (ri % 2 === 0) {
+      pdf.setFillColor(240, 245, 250);
+      pdf.rect(margin, y - 1, contentW, rowHeight, 'F');
+    }
+    x = margin + 2;
+    pdf.setFontSize(fontSize);
+    row.forEach((cell, ci) => {
+      const val = typeof cell === 'object' ? cell.text : String(cell);
+      const color = typeof cell === 'object' && cell.color ? cell.color : [40, 40, 40];
+      const bold = typeof cell === 'object' && cell.bold;
+      const align = typeof cell === 'object' ? cell.align : (typeof head[ci] === 'object' ? head[ci].align : 'left');
+      pdf.setTextColor(...color);
+      pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+      const truncated = val.length > 30 ? val.substring(0, 28) + '..' : val;
+      if (align === 'right') {
+        pdf.text(truncated, margin + widths.slice(0, ci + 1).reduce((s, w) => s + w, 0) - 2, y + 4, { align: 'right' });
+      } else {
+        pdf.text(truncated, x, y + 4);
+      }
+      x += widths[ci];
+    });
+    y += rowHeight;
+  });
+
+  // Footer row
+  if (footRow) {
+    ensurePage(rowHeight + 1);
+    pdf.setFillColor(...headColor);
+    pdf.rect(margin, y, contentW, rowHeight + 1, 'F');
+    pdf.setFontSize(fontSize);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(...BRAND.white);
+    x = margin + 2;
+    footRow.forEach((cell, ci) => {
+      const val = String(cell);
+      const align = typeof head[ci] === 'object' ? head[ci].align : 'left';
+      if (align === 'right') {
+        pdf.text(val, margin + widths.slice(0, ci + 1).reduce((s, w) => s + w, 0) - 2, y + 5, { align: 'right' });
+      } else {
+        pdf.text(val, x, y + 5);
+      }
+      x += widths[ci];
+    });
+    y += rowHeight + 2;
+  }
+
+  return y + 2;
+}
+
+// ── Narrative Analysis Engine ────────────────────────────────────────────────
 
 function analyseData(boardPlan, r78Data) {
   const {
     closedWonDeals, negotiatingDeals, quotingDeals, earlyStageDeals,
-    totalGPTotal, totalCostTotal, grossProfitTotal, netProfitTotal,
-    ebitdaTotal, mdfTotal, monthlyData, gpByServiceType,
-    gpByRep, employeeCosts, closedRecurringGP, closedNonRecurringGP,
+    totalGPTotal, totalCostTotal, netProfitTotal,
+    mdfTotal, monthlyData, gpByServiceType, employeeCosts,
   } = boardPlan;
 
   const allDeals = [...closedWonDeals, ...negotiatingDeals, ...quotingDeals, ...earlyStageDeals];
   const pipelineDeals = [...negotiatingDeals, ...quotingDeals, ...earlyStageDeals];
   const forecastDeals = [...closedWonDeals, ...negotiatingDeals];
 
-  const MRR_HIGH = 1000;
-  const NRR_HIGH = 10000;
-  const MRR_LOW = 300;
-  const NRR_LOW = 3000;
+  const MRR_HIGH = 1000, NRR_HIGH = 10000, MRR_LOW = 300, NRR_LOW = 3000;
 
   const recurringDeals = allDeals.filter(d => d.dealType === 'Recurring');
   const nonRecurringDeals = allDeals.filter(d => d.dealType !== 'Recurring');
@@ -54,9 +138,8 @@ function analyseData(boardPlan, r78Data) {
   const pipelineBigRecurring = pipelineRecurring.filter(d => d.revenue >= MRR_HIGH);
   const pipelineSmallRecurring = pipelineRecurring.filter(d => d.revenue < MRR_LOW);
 
-  // Rep analysis
-  const owners = [...new Set(forecastDeals.map(d => d.owner).filter(Boolean))].sort();
   const TARGET = 24000;
+  const owners = [...new Set(forecastDeals.map(d => d.owner).filter(Boolean))].sort();
   const repPerformance = owners.map(owner => {
     const repDeals = forecastDeals.filter(d => d.owner === owner);
     const cwRec = closedWonDeals.filter(d => d.owner === owner && d.dealType === 'Recurring');
@@ -67,155 +150,76 @@ function analyseData(boardPlan, r78Data) {
     return { owner, cwRecGP, totalGP, dealCount: repDeals.length, annualCost: empCost?.trueCost || 0, pctTarget: (cwRecGP / TARGET) * 100 };
   });
 
-  // Monthly trend
   const recentMonths = monthlyData.filter(m => m.recurringGP > 0);
-  const gpGrowthTrend = recentMonths.length >= 3
-    ? recentMonths.slice(-3).map((m, i, arr) => i > 0 ? m.recurringGP - arr[i - 1].recurringGP : 0).slice(1)
+  const gpGrowth = recentMonths.length >= 3
+    ? recentMonths.slice(-3).map((m, i, a) => i > 0 ? m.recurringGP - a[i - 1].recurringGP : 0).slice(1)
     : [];
-  const avgMonthlyGrowth = gpGrowthTrend.length > 0 ? gpGrowthTrend.reduce((s, v) => s + v, 0) / gpGrowthTrend.length : 0;
-  const isGrowing = avgMonthlyGrowth > 0;
+  const avgGrowth = gpGrowth.length > 0 ? gpGrowth.reduce((s, v) => s + v, 0) / gpGrowth.length : 0;
   const breakevenMonth = monthlyData.find(m => m.recurringGP > 0 && m.recurringGP >= m.totalCost);
 
-  // Service concentration
-  const sortedServices = [...(gpByServiceType || [])].sort((a, b) => b.value - a.value);
-  const totalServiceGP = sortedServices.reduce((s, st) => s + st.value, 0);
-  const dominantService = sortedServices[0];
-  const dominantPct = totalServiceGP > 0 && dominantService ? dominantService.value / totalServiceGP : 0;
+  const sortedSvc = [...(gpByServiceType || [])].sort((a, b) => b.value - a.value);
+  const totalSvcGP = sortedSvc.reduce((s, st) => s + st.value, 0);
+  const domSvc = sortedSvc[0];
+  const domPct = totalSvcGP > 0 && domSvc ? domSvc.value / totalSvcGP : 0;
 
-  // ── Build narratives ──
-  const theGood = [];
-  const theBad = [];
-  const trends = [];
+  // ── Narratives ──
+  const theGood = [], theBad = [], trends = [];
 
-  // THE GOOD
-  if (closedWonDeals.length > 0) {
-    const cwGP = closedWonDeals.reduce((s, d) => s + d.profit, 0);
-    theGood.push(`${closedWonDeals.length} deals have been closed and won, generating ${money(cwGP)} in monthly GP. This provides a confirmed revenue base.`);
-  }
-  if (netProfitTotal > 0) {
-    theGood.push(`The full forecast projects a net profit of ${money(netProfitTotal)} for the year, indicating the business plan is viable if negotiating deals land as expected.`);
-  }
-  if (breakevenMonth) {
-    theGood.push(`Recurring GP covers business costs from ${breakevenMonth.month} — the business reaches a self-sustaining position from recurring revenue alone.`);
-  }
-  if (isGrowing) {
-    theGood.push(`Recurring GP is trending upward with average monthly growth of ${money(avgMonthlyGrowth)}, showing positive momentum.`);
-  }
+  if (closedWonDeals.length > 0) theGood.push(`${closedWonDeals.length} deals closed and won, generating ${money(closedWonDeals.reduce((s, d) => s + d.profit, 0))} monthly GP — a confirmed revenue base.`);
+  if (netProfitTotal > 0) theGood.push(`Full forecast projects net profit of ${money(netProfitTotal)} for the year.`);
+  if (breakevenMonth) theGood.push(`Recurring GP covers costs from ${breakevenMonth.month} — self-sustaining position reached.`);
+  if (avgGrowth > 0) theGood.push(`Recurring GP trending upward: avg. monthly growth of ${money(avgGrowth)}.`);
   const strongReps = repPerformance.filter(r => r.pctTarget >= 60);
-  if (strongReps.length > 0) {
-    theGood.push(`${strongReps.map(r => r.owner).join(' and ')} ${strongReps.length === 1 ? 'is' : 'are'} tracking above 60% of the £24k recurring GP target.`);
-  }
-  if (bigRecurring.length > 0) {
-    const bigRecGP = bigRecurring.reduce((s, d) => s + d.profit, 0);
-    theGood.push(`${bigRecurring.length} high-value recurring deals (≥${money(MRR_HIGH)}/mo MRR) worth ${money(bigRecGP)}/mo GP — these are anchor accounts.`);
-  }
-  if (mdfTotal > 0) {
-    theGood.push(`MDF (Market Development Fund) contributes ${money(mdfTotal)} to offset costs, providing an additional profit buffer.`);
-  }
+  if (strongReps.length > 0) theGood.push(`${strongReps.map(r => r.owner).join(' & ')} tracking above 60% of £24k target.`);
+  if (bigRecurring.length > 0) theGood.push(`${bigRecurring.length} high-value recurring deals (≥${money(MRR_HIGH)}/mo MRR) worth ${money(bigRecurring.reduce((s, d) => s + d.profit, 0))}/mo GP.`);
+  if (mdfTotal > 0) theGood.push(`MDF contributes ${money(mdfTotal)} as an additional profit buffer.`);
 
-  // THE BAD
-  if (netProfitTotal < 0) {
-    theBad.push(`The forecast shows a net loss of ${money(netProfitTotal)} for the year. Cost control and pipeline conversion are critical.`);
-  }
+  if (netProfitTotal < 0) theBad.push(`Forecast shows net loss of ${money(netProfitTotal)}. Cost control and pipeline conversion are critical.`);
   const cwOnlyGross = (r78Data?.cwOnlyTotalGP || 0) - totalCostTotal;
-  if (cwOnlyGross < 0 && r78Data?.cwOnlyTotalGP) {
-    theBad.push(`On a Closed/Won-only basis, the business runs at a loss of ${money(cwOnlyGross)}. We are reliant on closing negotiating pipeline to break even.`);
-  }
+  if (cwOnlyGross < 0 && r78Data?.cwOnlyTotalGP) theBad.push(`Closed/Won-only basis runs at ${money(cwOnlyGross)} loss. Reliant on closing negotiating pipeline.`);
   const weakReps = repPerformance.filter(r => r.pctTarget < 30 && r.dealCount > 0);
-  if (weakReps.length > 0) {
-    theBad.push(`${weakReps.map(r => r.owner).join(' and ')} ${weakReps.length === 1 ? 'is' : 'are'} below 30% of the £24k target — action plans are needed.`);
-  }
+  if (weakReps.length > 0) theBad.push(`${weakReps.map(r => r.owner).join(' & ')} below 30% of £24k target — action plans needed.`);
   const negGP = negotiatingDeals.reduce((s, d) => s + d.profit, 0);
-  const cwGPTotal = closedWonDeals.reduce((s, d) => s + d.profit, 0);
-  if (negotiatingDeals.length > 3 && negGP > 0) {
-    const negPct = cwGPTotal + negGP > 0 ? negGP / (cwGPTotal + negGP) : 0;
-    theBad.push(`${negotiatingDeals.length} deals worth ${money(negGP)}/mo GP are still in negotiation — ${pct(negPct)} of forecast GP is at risk.`);
-  }
-  if (!breakevenMonth) {
-    theBad.push(`Recurring GP does not cover business costs within the forecast period — the business remains reliant on non-recurring project revenue.`);
-  }
+  const cwGP = closedWonDeals.reduce((s, d) => s + d.profit, 0);
+  if (negotiatingDeals.length > 3 && negGP > 0) theBad.push(`${negotiatingDeals.length} deals (${money(negGP)}/mo GP) still in negotiation — ${pct(negGP / (cwGP + negGP))} of forecast GP at risk.`);
+  if (!breakevenMonth) theBad.push(`Recurring GP doesn't cover costs in forecast period — reliant on non-recurring revenue.`);
 
-  // SALES TRENDS
-  const totalPipelineCount = pipelineRecurring.length;
-  const bigPipelinePct = totalPipelineCount > 0 ? pipelineBigRecurring.length / totalPipelineCount : 0;
+  const totalPCount = pipelineRecurring.length;
+  if (totalPCount > 0 && pipelineBigRecurring.length / totalPCount > 0.5)
+    trends.push({ title: 'High-Value Pipeline Concentration', type: 'warning', text: `${pipelineBigRecurring.length}/${totalPCount} recurring pipeline deals (${pct(pipelineBigRecurring.length / totalPCount)}) are ≥${money(MRR_HIGH)}/mo. Heavy weighting toward large deals = longer cycles + higher slippage risk.` });
+  if (totalPCount > 0 && pipelineSmallRecurring.length < 3)
+    trends.push({ title: pipelineSmallRecurring.length === 0 ? 'No Small Deal Pipeline' : 'Low-Value Pipeline Gap', type: pipelineSmallRecurring.length === 0 ? 'critical' : 'warning',
+      text: pipelineSmallRecurring.length === 0 ? `Zero low-value recurring deals (<${money(MRR_LOW)}/mo) in pipeline. Entire pipeline is mid-to-large, creating concentration risk.` : `Only ${pipelineSmallRecurring.length} deals below ${money(MRR_LOW)}/mo. Need smaller, faster-closing deals for pipeline breadth.` });
 
-  if (bigPipelinePct > 0.5 && totalPipelineCount > 0) {
-    trends.push({
-      title: 'High-Value Pipeline Concentration',
-      type: 'warning',
-      text: `${pipelineBigRecurring.length} of ${totalPipelineCount} recurring pipeline deals (${pct(bigPipelinePct)}) are high-value (≥${money(MRR_HIGH)}/mo MRR). Pipeline is heavily weighted toward large deals which take longer to close and carry higher slippage risk.`,
-    });
-  }
-  if (pipelineSmallRecurring.length < 3 && totalPipelineCount > 0) {
-    trends.push({
-      title: 'Low-Value Pipeline Gap',
-      type: pipelineSmallRecurring.length === 0 ? 'critical' : 'warning',
-      text: pipelineSmallRecurring.length === 0
-        ? `There are zero low-value recurring deals (<${money(MRR_LOW)}/mo) in the pipeline. The entire pipeline consists of mid-to-large deals, creating concentration risk. A balanced pipeline needs volume at all deal sizes.`
-        : `Only ${pipelineSmallRecurring.length} recurring pipeline deals are below ${money(MRR_LOW)}/mo MRR. The business lacks a healthy volume of smaller, faster-closing deals. Consider targeting SMB accounts for pipeline breadth.`,
-    });
-  }
+  const recPct = allDeals.length > 0 ? recurringDeals.length / allDeals.length : 0;
+  if (recPct < 0.4) trends.push({ title: 'Low Recurring Ratio', type: 'warning', text: `Only ${pct(recPct)} of deals are recurring. Target 60%+ for predictable revenue.` });
+  else if (recPct >= 0.6) trends.push({ title: 'Strong Recurring Mix', type: 'positive', text: `${pct(recPct)} of deals are recurring — good revenue predictability.` });
 
-  // Deal type mix
-  const recurringPct = allDeals.length > 0 ? recurringDeals.length / allDeals.length : 0;
-  if (recurringPct < 0.4) {
-    trends.push({
-      title: 'Low Recurring Deal Ratio',
-      type: 'warning',
-      text: `Only ${pct(recurringPct)} of deals are recurring (${recurringDeals.length} of ${allDeals.length}). A healthy managed service business typically targets 60%+ recurring for predictable revenue.`,
-    });
-  } else if (recurringPct >= 0.6) {
-    trends.push({
-      title: 'Strong Recurring Mix',
-      type: 'positive',
-      text: `${pct(recurringPct)} of deals are recurring (${recurringDeals.length} of ${allDeals.length}), providing good revenue predictability.`,
-    });
-  }
+  const avgMRR = recurringDeals.length > 0 ? recurringDeals.reduce((s, d) => s + d.revenue, 0) / recurringDeals.length : 0;
+  const avgNR = nonRecurringDeals.length > 0 ? nonRecurringDeals.reduce((s, d) => s + d.revenue, 0) / nonRecurringDeals.length : 0;
+  trends.push({ title: 'Average Deal Values', type: 'info', text: `Avg recurring MRR: ${money(avgMRR)}/mo | Avg NR value: ${money(avgNR)}. ${avgMRR > MRR_HIGH ? 'Deals skew large — ensure lower-value volume.' : avgMRR < MRR_LOW ? 'Deals small — look for anchor accounts.' : 'Healthy mid-range.'}` });
 
-  // Average deal values
-  const avgRecMRR = recurringDeals.length > 0 ? recurringDeals.reduce((s, d) => s + d.revenue, 0) / recurringDeals.length : 0;
-  const avgNRValue = nonRecurringDeals.length > 0 ? nonRecurringDeals.reduce((s, d) => s + d.revenue, 0) / nonRecurringDeals.length : 0;
-  trends.push({
-    title: 'Average Deal Values',
-    type: 'info',
-    text: `Average recurring deal MRR: ${money(avgRecMRR)}/mo | Average non-recurring deal value: ${money(avgNRValue)}. ${avgRecMRR > MRR_HIGH ? 'Deals skew large — ensure pipeline has volume at lower values too.' : avgRecMRR < MRR_LOW ? 'Deals are relatively small — look for larger anchor accounts.' : 'Deal sizes are in a healthy mid-range.'}`,
-  });
+  if (domPct > 0.6 && domSvc) trends.push({ title: 'Service Concentration', type: 'info', text: `${domSvc.name} = ${pct(domPct)} of NR GP. Diversification reduces risk.` });
 
-  // Service concentration
-  if (dominantPct > 0.6 && dominantService) {
-    trends.push({
-      title: 'Service Type Concentration',
-      type: 'info',
-      text: `${dominantService.name} accounts for ${pct(dominantPct)} of non-recurring GP. Diversification across service types reduces risk.`,
-    });
-  }
-
-  // Size distribution tables
-  const sizeDistribution = [
-    { band: `Large (≥${money(MRR_HIGH)}/mo)`, count: bigRecurring.length, gpMo: bigRecurring.reduce((s, d) => s + d.profit, 0), pctOfTotal: recurringDeals.length > 0 ? pct(bigRecurring.length / recurringDeals.length) : '0%' },
-    { band: `Mid (${money(MRR_LOW)}–${money(MRR_HIGH)}/mo)`, count: midRecurring.length, gpMo: midRecurring.reduce((s, d) => s + d.profit, 0), pctOfTotal: recurringDeals.length > 0 ? pct(midRecurring.length / recurringDeals.length) : '0%' },
-    { band: `Small (<${money(MRR_LOW)}/mo)`, count: smallRecurring.length, gpMo: smallRecurring.reduce((s, d) => s + d.profit, 0), pctOfTotal: recurringDeals.length > 0 ? pct(smallRecurring.length / recurringDeals.length) : '0%' },
+  const sizeDist = [
+    { band: `Large (≥${money(MRR_HIGH)}/mo)`, count: bigRecurring.length, gp: bigRecurring.reduce((s, d) => s + d.profit, 0), p: recurringDeals.length > 0 ? pct(bigRecurring.length / recurringDeals.length) : '0%' },
+    { band: `Mid (${money(MRR_LOW)}-${money(MRR_HIGH)})`, count: midRecurring.length, gp: midRecurring.reduce((s, d) => s + d.profit, 0), p: recurringDeals.length > 0 ? pct(midRecurring.length / recurringDeals.length) : '0%' },
+    { band: `Small (<${money(MRR_LOW)}/mo)`, count: smallRecurring.length, gp: smallRecurring.reduce((s, d) => s + d.profit, 0), p: recurringDeals.length > 0 ? pct(smallRecurring.length / recurringDeals.length) : '0%' },
+  ];
+  const nrDist = [
+    { band: `Large (≥${money(NRR_HIGH)})`, count: bigNR.length, gp: bigNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(bigNR.length / nonRecurringDeals.length) : '0%' },
+    { band: `Mid`, count: midNR.length, gp: midNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(midNR.length / nonRecurringDeals.length) : '0%' },
+    { band: `Small (<${money(NRR_LOW)})`, count: smallNR.length, gp: smallNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(smallNR.length / nonRecurringDeals.length) : '0%' },
   ];
 
-  const nrSizeDistribution = [
-    { band: `Large (≥${money(NRR_HIGH)})`, count: bigNR.length, gp: bigNR.reduce((s, d) => s + d.profit, 0), pctOfTotal: nonRecurringDeals.length > 0 ? pct(bigNR.length / nonRecurringDeals.length) : '0%' },
-    { band: `Mid (${money(NRR_LOW)}–${money(NRR_HIGH)})`, count: midNR.length, gp: midNR.reduce((s, d) => s + d.profit, 0), pctOfTotal: nonRecurringDeals.length > 0 ? pct(midNR.length / nonRecurringDeals.length) : '0%' },
-    { band: `Small (<${money(NRR_LOW)})`, count: smallNR.length, gp: smallNR.reduce((s, d) => s + d.profit, 0), pctOfTotal: nonRecurringDeals.length > 0 ? pct(smallNR.length / nonRecurringDeals.length) : '0%' },
-  ];
-
-  return { theGood, theBad, trends, sizeDistribution, nrSizeDistribution, repPerformance, breakevenMonth };
+  return { theGood, theBad, trends, sizeDist, nrDist, repPerformance, breakevenMonth };
 }
 
-// ─── PDF Generator ───────────────────────────────────────────────────────────
+// ── PDF Generator ────────────────────────────────────────────────────────────
 
 export async function generateBoardPDF(boardPlan, r78Data = {}) {
-  // Dynamic import of jspdf-autotable to avoid Rolldown static resolution issues
-  const { default: autoTable } = await import('jspdf-autotable');
-
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  const pageW = 210;
-  const pageH = 297;
-  const margin = 15;
+  const pageW = 210, pageH = 297, margin = 15;
   const contentW = pageW - margin * 2;
   let y = margin;
 
@@ -223,494 +227,309 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const monthYear = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 
-  const ensureSpace = (needed) => {
-    if (y + needed > pageH - 20) {
-      pdf.addPage();
-      y = margin;
-    }
-  };
+  const ensureSpace = (n) => { if (y + n > pageH - 20) { pdf.addPage(); y = margin; } };
 
-  const sectionHeading = (title, subtitle) => {
+  const heading = (title, sub) => {
     ensureSpace(20);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...BRAND.accent);
+    pdf.setFontSize(14); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.accent);
     pdf.text(title, margin, y);
     y += 2;
-    pdf.setDrawColor(...BRAND.accent);
-    pdf.setLineWidth(0.8);
+    pdf.setDrawColor(...BRAND.accent); pdf.setLineWidth(0.8);
     pdf.line(margin, y, margin + contentW, y);
     y += 5;
-    if (subtitle) {
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(...BRAND.muted);
-      pdf.text(subtitle, margin, y);
-      y += 5;
-    }
+    if (sub) { pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted); pdf.text(sub, margin, y); y += 5; }
   };
 
-  const writeBullet = (text, iconColor) => {
+  const bullet = (text, color) => {
     ensureSpace(16);
-    pdf.setFillColor(...iconColor);
-    pdf.circle(margin + 2, y - 1.2, 1.5, 'F');
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(60, 60, 60);
+    pdf.setFillColor(...color); pdf.circle(margin + 2, y - 1.2, 1.5, 'F');
+    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(60, 60, 60);
     const lines = pdf.splitTextToSize(text, contentW - 10);
     pdf.text(lines, margin + 7, y);
     y += lines.length * 4.5 + 2;
   };
 
-  const writeTrendCard = (trend) => {
+  const trendCard = (t) => {
     const colors = { warning: BRAND.amber, critical: BRAND.red, positive: BRAND.green, info: BRAND.accent };
-    const color = colors[trend.type] || BRAND.muted;
-    const lines = pdf.splitTextToSize(trend.text, contentW - 14);
-    const blockH = 8 + lines.length * 4.2 + 4;
-    ensureSpace(blockH);
-    pdf.setFillColor(...color);
-    pdf.roundedRect(margin, y - 2, 2, blockH, 1, 1, 'F');
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...color);
-    pdf.text(trend.title, margin + 6, y + 2);
-    y += 7;
-    pdf.setFontSize(8.5);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(60, 60, 60);
+    const c = colors[t.type] || BRAND.muted;
+    const lines = pdf.splitTextToSize(t.text, contentW - 14);
+    const h = 8 + lines.length * 4.2 + 4;
+    ensureSpace(h);
+    pdf.setFillColor(...c); pdf.roundedRect(margin, y - 2, 2, h, 1, 1, 'F');
+    pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...c);
+    pdf.text(t.title, margin + 6, y + 2); y += 7;
+    pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(60, 60, 60);
     pdf.text(lines, margin + 6, y);
     y += lines.length * 4.2 + 5;
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 1 — COVER
-  // ═══════════════════════════════════════════════════════════════════════════
-  pdf.setFillColor(...BRAND.navy);
-  pdf.rect(0, 0, pageW, pageH, 'F');
-  pdf.setFillColor(...BRAND.accent);
-  pdf.rect(0, 0, pageW, 4, 'F');
+  const R = (align) => ({ align: align || 'right' });
 
-  pdf.setFontSize(16);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(...BRAND.accent);
+  // ═══════════════════════════════════════════════════════════════════
+  // COVER PAGE
+  // ═══════════════════════════════════════════════════════════════════
+  pdf.setFillColor(...BRAND.navy); pdf.rect(0, 0, pageW, pageH, 'F');
+  pdf.setFillColor(...BRAND.accent); pdf.rect(0, 0, pageW, 4, 'F');
+
+  pdf.setFontSize(16); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.accent);
   pdf.text('UNLEASHED', margin, 40);
-  pdf.setDrawColor(...BRAND.accent);
-  pdf.setLineWidth(1);
-  pdf.line(margin, 46, margin + 60, 46);
+  pdf.setDrawColor(...BRAND.accent); pdf.setLineWidth(1); pdf.line(margin, 46, margin + 60, 46);
 
-  pdf.setFontSize(32);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(...BRAND.white);
+  pdf.setFontSize(32); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.white);
   pdf.text('Board Sales Report', margin, 70);
-
-  pdf.setFontSize(14);
-  pdf.setFont('helvetica', 'normal');
-  pdf.setTextColor(...BRAND.light);
+  pdf.setFontSize(14); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.light);
   pdf.text('Sales Forecast & Pipeline Analysis', margin, 82);
 
   if (boardPlan.scenarioLabel) {
-    pdf.setFontSize(11);
-    pdf.setTextColor(...BRAND.accent);
+    pdf.setFontSize(11); pdf.setTextColor(...BRAND.accent);
     pdf.text(boardPlan.scenarioLabel, margin, 94);
   }
-
-  pdf.setFontSize(12);
-  pdf.setTextColor(...BRAND.muted);
-  pdf.text(dateStr, margin, 115);
+  pdf.setFontSize(12); pdf.setTextColor(...BRAND.muted); pdf.text(dateStr, margin, 115);
 
   // Cover KPI boxes
-  const coverKPIs = [
+  const kpis = [
     { label: 'Forecast GP', value: money(boardPlan.totalGPTotal), color: BRAND.accent },
     { label: 'Net Profit', value: money(boardPlan.netProfitTotal), color: boardPlan.netProfitTotal >= 0 ? BRAND.green : BRAND.red },
     { label: 'Closed Won', value: `${boardPlan.closedWonDeals.length} deals`, color: BRAND.green },
     { label: 'Negotiating', value: `${boardPlan.negotiatingDeals.length} deals`, color: BRAND.amber },
   ];
-
-  const kpiBoxW = (contentW - 12) / 4;
-  const kpiY = 145;
-  coverKPIs.forEach((kpi, i) => {
-    const x = margin + i * (kpiBoxW + 4);
-    pdf.setFillColor(...BRAND.darkPanel);
-    pdf.roundedRect(x, kpiY, kpiBoxW, 30, 2, 2, 'F');
-    pdf.setFillColor(...kpi.color);
-    pdf.rect(x, kpiY, kpiBoxW, 2, 'F');
-    pdf.setFontSize(7.5);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...BRAND.muted);
-    pdf.text(kpi.label, x + kpiBoxW / 2, kpiY + 10, { align: 'center' });
-    pdf.setFontSize(13);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...kpi.color);
-    pdf.text(kpi.value, x + kpiBoxW / 2, kpiY + 21, { align: 'center' });
-    pdf.setFont('helvetica', 'normal');
+  const bw = (contentW - 12) / 4;
+  kpis.forEach((k, i) => {
+    const x = margin + i * (bw + 4);
+    pdf.setFillColor(...BRAND.darkPanel); pdf.roundedRect(x, 145, bw, 30, 2, 2, 'F');
+    pdf.setFillColor(...k.color); pdf.rect(x, 145, bw, 2, 'F');
+    pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+    pdf.text(k.label, x + bw / 2, 155, { align: 'center' });
+    pdf.setFontSize(13); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...k.color);
+    pdf.text(k.value, x + bw / 2, 166, { align: 'center' });
   });
 
-  // Pipeline status on cover
+  // Pipeline overview on cover
+  pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.light);
+  pdf.text('Pipeline Overview', margin, 190);
   const stages = [
-    { label: 'Quoting', count: boardPlan.quotingDeals.length, gp: boardPlan.quotingDeals.reduce((s, d) => s + d.profit, 0), color: BRAND.purple },
-    { label: 'Early Stage', count: boardPlan.earlyStageDeals.length, gp: boardPlan.earlyStageDeals.reduce((s, d) => s + d.profit, 0), color: BRAND.muted },
+    { l: 'Quoting', c: boardPlan.quotingDeals.length, gp: boardPlan.quotingDeals.reduce((s, d) => s + d.profit, 0), col: BRAND.purple },
+    { l: 'Early Stage', c: boardPlan.earlyStageDeals.length, gp: boardPlan.earlyStageDeals.reduce((s, d) => s + d.profit, 0), col: BRAND.muted },
   ];
-  const stageY = 190;
-  pdf.setFontSize(10);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(...BRAND.light);
-  pdf.text('Pipeline Overview', margin, stageY);
   stages.forEach((st, i) => {
-    const sy = stageY + 8 + i * 12;
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...st.color);
-    pdf.text(`${st.label}: ${st.count} deals — ${money(st.gp)}/mo GP`, margin + 4, sy);
+    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...st.col);
+    pdf.text(`${st.l}: ${st.c} deals — ${money(st.gp)}/mo GP`, margin + 4, 198 + i * 10);
   });
 
-  pdf.setFontSize(8);
-  pdf.setTextColor(...BRAND.muted);
+  pdf.setFontSize(8); pdf.setTextColor(...BRAND.muted);
   pdf.text('CONFIDENTIAL — For Board & Senior Leadership Only', pageW / 2, pageH - 20, { align: 'center' });
-  pdf.setFillColor(...BRAND.accent);
-  pdf.rect(0, pageH - 4, pageW, 4, 'F');
+  pdf.setFillColor(...BRAND.accent); pdf.rect(0, pageH - 4, pageW, 4, 'F');
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 2 — EXECUTIVE SUMMARY
-  // ═══════════════════════════════════════════════════════════════════════════
-  pdf.addPage();
-  y = margin;
+  // ═══════════════════════════════════════════════════════════════════
+  // EXECUTIVE SUMMARY
+  // ═══════════════════════════════════════════════════════════════════
+  pdf.addPage(); y = margin;
+  pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+  pdf.text('Executive Summary', margin, y + 4); y += 8;
+  pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+  pdf.text(`Report period: ${monthYear} | Based on Board Business Plan`, margin, y); y += 10;
 
-  pdf.setFontSize(18);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(30, 30, 30);
-  pdf.text('Executive Summary', margin, y + 4);
-  y += 8;
-  pdf.setFontSize(9);
-  pdf.setFont('helvetica', 'normal');
-  pdf.setTextColor(...BRAND.muted);
-  pdf.text(`Report period: ${monthYear} | Forecast based on Board Business Plan`, margin, y);
-  y += 10;
-
-  sectionHeading('The Good', 'Positive indicators and achievements');
-  if (analysis.theGood.length === 0) writeBullet('No significant positive indicators identified.', BRAND.muted);
-  analysis.theGood.forEach(item => writeBullet(item, BRAND.green));
+  heading('The Good', 'Positive indicators and achievements');
+  if (analysis.theGood.length === 0) bullet('No significant positives identified.', BRAND.muted);
+  analysis.theGood.forEach(item => bullet(item, BRAND.green));
   y += 4;
 
-  sectionHeading('The Bad', 'Risks, concerns and areas requiring attention');
-  if (analysis.theBad.length === 0) writeBullet('No significant concerns — all metrics are on track.', BRAND.green);
-  analysis.theBad.forEach(item => writeBullet(item, BRAND.red));
+  heading('The Bad', 'Risks, concerns and areas requiring attention');
+  if (analysis.theBad.length === 0) bullet('No significant concerns — all on track.', BRAND.green);
+  analysis.theBad.forEach(item => bullet(item, BRAND.red));
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 3 — SALES TRENDS
-  // ═══════════════════════════════════════════════════════════════════════════
-  pdf.addPage();
-  y = margin;
+  // ═══════════════════════════════════════════════════════════════════
+  // SALES TRENDS
+  // ═══════════════════════════════════════════════════════════════════
+  pdf.addPage(); y = margin;
+  pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+  pdf.text('Sales Trends & Pipeline Analysis', margin, y + 4); y += 12;
 
-  pdf.setFontSize(18);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(30, 30, 30);
-  pdf.text('Sales Trends & Pipeline Analysis', margin, y + 4);
-  y += 12;
-
-  analysis.trends.forEach(trend => writeTrendCard(trend));
+  analysis.trends.forEach(t => trendCard(t));
   y += 4;
 
-  sectionHeading('Recurring Deal Size Distribution', 'Pipeline breakdown by monthly recurring revenue band');
-  autoTable(pdf, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Deal Size Band', 'Count', 'Monthly GP', '% of Recurring']],
-    body: analysis.sizeDistribution.map(r => [r.band, r.count.toString(), money(r.gpMo), r.pctOfTotal]),
-    theme: 'striped',
-    styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40] },
-    headStyles: { fillColor: BRAND.accent, textColor: BRAND.white, fontStyle: 'bold', fontSize: 9 },
-    alternateRowStyles: { fillColor: [240, 245, 250] },
-    columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'center' } },
-  });
-  y = pdf.lastAutoTable.finalY + 8;
+  heading('Recurring Deal Size Distribution', 'By monthly recurring revenue band');
+  y = drawTable(pdf, y, margin, contentW,
+    ['Deal Size Band', 'Count', { text: 'Monthly GP', align: 'right' }, '% of Rec.'],
+    analysis.sizeDist.map(r => [r.band, String(r.count), { text: money(r.gp), align: 'right' }, r.p]),
+    { headColor: BRAND.accent, colWidths: [60, 25, 45, 40], pageH }
+  );
+  y += 4;
 
-  if (analysis.nrSizeDistribution.some(r => r.count > 0)) {
-    sectionHeading('Non-Recurring Deal Size Distribution', 'Project/one-off deal breakdown');
-    autoTable(pdf, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [['Deal Size Band', 'Count', 'GP', '% of NR']],
-      body: analysis.nrSizeDistribution.map(r => [r.band, r.count.toString(), money(r.gp), r.pctOfTotal]),
-      theme: 'striped',
-      styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40] },
-      headStyles: { fillColor: BRAND.amber, textColor: BRAND.white, fontStyle: 'bold', fontSize: 9 },
-      alternateRowStyles: { fillColor: [255, 252, 240] },
-      columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'center' } },
-    });
-    y = pdf.lastAutoTable.finalY + 8;
+  if (analysis.nrDist.some(r => r.count > 0)) {
+    heading('Non-Recurring Deal Size Distribution', 'Project/one-off deal breakdown');
+    y = drawTable(pdf, y, margin, contentW,
+      ['Deal Size Band', 'Count', { text: 'GP', align: 'right' }, '% of NR'],
+      analysis.nrDist.map(r => [r.band, String(r.count), { text: money(r.gp), align: 'right' }, r.p]),
+      { headColor: BRAND.amber, colWidths: [60, 25, 45, 40], pageH }
+    );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 4 — FINANCIAL OVERVIEW
-  // ═══════════════════════════════════════════════════════════════════════════
-  pdf.addPage();
-  y = margin;
+  // ═══════════════════════════════════════════════════════════════════
+  // FINANCIAL OVERVIEW
+  // ═══════════════════════════════════════════════════════════════════
+  pdf.addPage(); y = margin;
+  pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+  pdf.text('Financial Overview', margin, y + 4); y += 12;
 
-  pdf.setFontSize(18);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(30, 30, 30);
-  pdf.text('Financial Overview', margin, y + 4);
-  y += 12;
+  heading('Year-End Forecast', 'Closed/Won only vs Full Forecast (incl. Negotiating)');
 
-  sectionHeading('Year-End Forecast', 'Closed/Won only vs Full Forecast (incl. Negotiating)');
+  const cwRecGP = r78Data.cwOnlyRecGP || 0;
+  const cwNRGP = r78Data.cwOnlyNRGP || 0;
+  const cwTotGP = r78Data.cwOnlyTotalGP || (cwRecGP + cwNRGP);
+  const cwGross = cwTotGP - boardPlan.totalCostTotal;
+  const cwNet = cwGross + (boardPlan.mdfTotal || 0);
 
-  const cwOnlyRecGP = r78Data.cwOnlyRecGP || 0;
-  const cwOnlyNRGP = r78Data.cwOnlyNRGP || 0;
-  const cwOnlyTotalGP = r78Data.cwOnlyTotalGP || (cwOnlyRecGP + cwOnlyNRGP);
-  const cwOnlyGross = cwOnlyTotalGP - boardPlan.totalCostTotal;
-  const cwOnlyNet = cwOnlyGross + (boardPlan.mdfTotal || 0);
+  const fRows = [
+    ['Recurring GP (R78)', { text: money(cwRecGP), align: 'right' }, { text: money(boardPlan.closedRecurringGP), align: 'right' }, { text: money(boardPlan.closedRecurringGP - cwRecGP), align: 'right' }],
+    ['Non-Recurring GP', { text: money(cwNRGP), align: 'right' }, { text: money(boardPlan.closedNonRecurringGP), align: 'right' }, { text: money(boardPlan.closedNonRecurringGP - cwNRGP), align: 'right' }],
+    [{ text: 'Total GP', bold: true }, { text: money(cwTotGP), align: 'right', bold: true }, { text: money(boardPlan.totalGPTotal), align: 'right', bold: true }, { text: money(boardPlan.totalGPTotal - cwTotGP), align: 'right', bold: true }],
+    ['Total Costs', { text: money(boardPlan.totalCostTotal), align: 'right', color: BRAND.red }, { text: money(boardPlan.totalCostTotal), align: 'right', color: BRAND.red }, { text: '—', align: 'right' }],
+    [{ text: 'Gross Profit', bold: true }, { text: money(cwGross), align: 'right', bold: true, color: cwGross >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.grossProfitTotal), align: 'right', bold: true, color: boardPlan.grossProfitTotal >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.grossProfitTotal - cwGross), align: 'right' }],
+  ];
+  if (boardPlan.mdfTotal) fRows.push(['MDF Offset', { text: '+' + money(boardPlan.mdfTotal), align: 'right' }, { text: '+' + money(boardPlan.mdfTotal), align: 'right' }, { text: '—', align: 'right' }]);
+  fRows.push([{ text: 'Net Profit', bold: true }, { text: money(cwNet), align: 'right', bold: true, color: cwNet >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.netProfitTotal), align: 'right', bold: true, color: boardPlan.netProfitTotal >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.netProfitTotal - cwNet), align: 'right' }]);
+  fRows.push(['EBITDA', { text: '—', align: 'right' }, { text: money(boardPlan.ebitdaTotal), align: 'right' }, { text: '—', align: 'right' }]);
 
-  autoTable(pdf, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Metric', 'Closed/Won Only', 'Full Forecast', 'Variance']],
-    body: [
-      ['Recurring GP (R78)', money(cwOnlyRecGP), money(boardPlan.closedRecurringGP), money(boardPlan.closedRecurringGP - cwOnlyRecGP)],
-      ['Non-Recurring GP', money(cwOnlyNRGP), money(boardPlan.closedNonRecurringGP), money(boardPlan.closedNonRecurringGP - cwOnlyNRGP)],
-      ['Total GP', money(cwOnlyTotalGP), money(boardPlan.totalGPTotal), money(boardPlan.totalGPTotal - cwOnlyTotalGP)],
-      ['Total Costs', money(boardPlan.totalCostTotal), money(boardPlan.totalCostTotal), '—'],
-      ['Gross Profit', money(cwOnlyGross), money(boardPlan.grossProfitTotal), money(boardPlan.grossProfitTotal - cwOnlyGross)],
-      ...(boardPlan.mdfTotal ? [['MDF Offset', '+' + money(boardPlan.mdfTotal), '+' + money(boardPlan.mdfTotal), '—']] : []),
-      ['Net Profit', money(cwOnlyNet), money(boardPlan.netProfitTotal), money(boardPlan.netProfitTotal - cwOnlyNet)],
-      ['EBITDA', '—', money(boardPlan.ebitdaTotal), '—'],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40] },
-    headStyles: { fillColor: BRAND.navy, textColor: BRAND.white, fontStyle: 'bold', fontSize: 9 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 42 },
-      1: { halign: 'right', cellWidth: 38 },
-      2: { halign: 'right', cellWidth: 38 },
-      3: { halign: 'right', cellWidth: 32 },
-    },
-    didParseCell: (data) => {
-      if (data.section === 'body') {
-        const label = data.row.raw[0];
-        if (label === 'Total GP' || label === 'Gross Profit' || label === 'Net Profit') {
-          data.cell.styles.fontStyle = 'bold';
-        }
-      }
-    },
-  });
-  y = pdf.lastAutoTable.finalY + 10;
+  y = drawTable(pdf, y, margin, contentW,
+    ['Metric', { text: 'CW Only', align: 'right' }, { text: 'Full Forecast', align: 'right' }, { text: 'Variance', align: 'right' }],
+    fRows,
+    { headColor: BRAND.navy, colWidths: [45, 40, 42, 38], pageH }
+  );
+  y += 6;
 
-  sectionHeading('Annual Cost Breakdown', 'Business operating costs');
-  autoTable(pdf, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Cost Category', 'Annual Amount']],
-    body: [
-      ...boardPlan.costBreakdown.map(c => [c.name, money(c.value)]),
-      ['TOTAL', money(boardPlan.totalCostTotal)],
-    ],
-    theme: 'striped',
-    styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40] },
-    headStyles: { fillColor: BRAND.red, textColor: BRAND.white, fontStyle: 'bold', fontSize: 9 },
-    alternateRowStyles: { fillColor: [255, 245, 245] },
-    columnStyles: { 1: { halign: 'right' } },
-    didParseCell: (data) => {
-      if (data.section === 'body' && data.row.raw[0] === 'TOTAL') {
-        data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fillColor = [255, 230, 230];
-      }
-    },
-  });
-  y = pdf.lastAutoTable.finalY + 10;
+  heading('Annual Cost Breakdown', 'Business operating costs');
+  y = drawTable(pdf, y, margin, contentW,
+    ['Cost Category', { text: 'Annual Amount', align: 'right' }],
+    [...boardPlan.costBreakdown.map(c => [c.name, { text: money(c.value), align: 'right' }])],
+    { headColor: BRAND.red, colWidths: [100, 70], footRow: ['TOTAL', money(boardPlan.totalCostTotal)], pageH }
+  );
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
   // MONTHLY P&L
-  // ═══════════════════════════════════════════════════════════════════════════
-  pdf.addPage();
-  y = margin;
+  // ═══════════════════════════════════════════════════════════════════
+  pdf.addPage(); y = margin;
+  pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+  pdf.text('Monthly P&L Forecast', margin, y + 4); y += 12;
 
-  pdf.setFontSize(18);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(30, 30, 30);
-  pdf.text('Monthly P&L Forecast', margin, y + 4);
-  y += 12;
+  heading('Month-by-Month Breakdown', 'CW + Negotiating deals from Business Plan');
 
-  sectionHeading('Month-by-Month Breakdown', 'From Business Plan figures — CW + Negotiating deals');
+  const plHead = ['Month', { text: 'Rec GP', align: 'right' }, { text: 'NR GP', align: 'right' }, { text: 'Total GP', align: 'right' }, { text: 'Costs', align: 'right' }, { text: 'Net Profit', align: 'right' }, { text: 'EBITDA', align: 'right' }, { text: 'Cumul.', align: 'right' }];
+  const plBody = boardPlan.monthlyData.map(m => [
+    m.month,
+    { text: money(m.recurringGP), align: 'right' },
+    { text: money(m.nonRecurringGP), align: 'right' },
+    { text: money(m.totalGP), align: 'right', bold: true },
+    { text: money(m.totalCost), align: 'right', color: BRAND.red },
+    { text: money(m.netProfit), align: 'right', color: m.netProfit >= 0 ? BRAND.green : BRAND.red },
+    { text: money(m.ebitda), align: 'right', color: m.ebitda >= 0 ? BRAND.green : BRAND.red },
+    { text: money(m.cumulativeEBITDA), align: 'right', bold: true, color: m.cumulativeEBITDA >= 0 ? BRAND.green : BRAND.red },
+  ]);
+  const plFoot = ['Total', money(boardPlan.closedRecurringGP), money(boardPlan.closedNonRecurringGP), money(boardPlan.totalGPTotal), money(boardPlan.totalCostTotal), money(boardPlan.netProfitTotal), money(boardPlan.ebitdaTotal), money(boardPlan.cumulativeEBITDAFinal)];
 
-  autoTable(pdf, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Month', 'Rec. GP', 'NR GP', 'Total GP', 'Costs', 'Net Profit', 'EBITDA', 'Cumulative']],
-    body: boardPlan.monthlyData.map(m => [
-      m.month, money(m.recurringGP), money(m.nonRecurringGP), money(m.totalGP),
-      money(m.totalCost), money(m.netProfit), money(m.ebitda), money(m.cumulativeEBITDA),
-    ]),
-    foot: [[
-      'Year Total', money(boardPlan.closedRecurringGP), money(boardPlan.closedNonRecurringGP),
-      money(boardPlan.totalGPTotal), money(boardPlan.totalCostTotal), money(boardPlan.netProfitTotal),
-      money(boardPlan.ebitdaTotal), money(boardPlan.cumulativeEBITDAFinal),
-    ]],
-    theme: 'grid',
-    styles: { fontSize: 8, cellPadding: 2.5, textColor: [40, 40, 40] },
-    headStyles: { fillColor: BRAND.navy, textColor: BRAND.white, fontStyle: 'bold', fontSize: 8 },
-    footStyles: { fillColor: BRAND.navy, textColor: BRAND.white, fontStyle: 'bold', fontSize: 8 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 20 },
-      1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' },
-      4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' },
-    },
-    didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index >= 5) {
-        const m = boardPlan.monthlyData[data.row.index];
-        if (m) {
-          const num = data.column.index === 5 ? m.netProfit : data.column.index === 6 ? m.ebitda : m.cumulativeEBITDA;
-          if (num < 0) data.cell.styles.textColor = BRAND.red;
-        }
-      }
-    },
+  y = drawTable(pdf, y, margin, contentW, plHead, plBody, {
+    headColor: BRAND.navy, fontSize: 8, rowHeight: 6,
+    colWidths: [22, 22, 20, 24, 24, 24, 22, 24],
+    footRow: plFoot, pageH
   });
-  y = pdf.lastAutoTable.finalY + 10;
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
   // REP PERFORMANCE
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
+  y += 6;
   ensureSpace(60);
-  sectionHeading('Sales Rep Performance', 'Target: £24,000 monthly recurring GP per rep');
+  heading('Sales Rep Performance', 'Target: £24,000 monthly recurring GP per rep');
 
-  autoTable(pdf, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Rep', 'Deals', 'CW Rec. GP', 'Total GP', '% Target', 'Cost', 'ROI']],
-    body: analysis.repPerformance.map(r => [
-      r.owner, r.dealCount.toString(), money(r.cwRecGP), money(r.totalGP),
-      r.pctTarget.toFixed(0) + '%', r.annualCost > 0 ? money(r.annualCost) : '—',
-      r.annualCost > 0 ? ((r.totalGP / r.annualCost) * 100).toFixed(0) + '%' : '—',
+  y = drawTable(pdf, y, margin, contentW,
+    ['Rep', 'Deals', { text: 'CW Rec GP', align: 'right' }, { text: 'Total GP', align: 'right' }, { text: '% Target', align: 'right' }, { text: 'Cost', align: 'right' }, { text: 'ROI', align: 'right' }],
+    analysis.repPerformance.map(r => [
+      r.owner, String(r.dealCount),
+      { text: money(r.cwRecGP), align: 'right' },
+      { text: money(r.totalGP), align: 'right' },
+      { text: r.pctTarget.toFixed(0) + '%', align: 'right', color: r.pctTarget >= 60 ? BRAND.green : r.pctTarget < 30 ? BRAND.red : BRAND.amber },
+      { text: r.annualCost > 0 ? money(r.annualCost) : '—', align: 'right' },
+      { text: r.annualCost > 0 ? ((r.totalGP / r.annualCost) * 100).toFixed(0) + '%' : '—', align: 'right', color: r.annualCost > 0 ? (r.totalGP >= r.annualCost ? BRAND.green : BRAND.red) : BRAND.muted },
     ]),
-    theme: 'striped',
-    styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40] },
-    headStyles: { fillColor: BRAND.accent, textColor: BRAND.white, fontStyle: 'bold', fontSize: 9 },
-    alternateRowStyles: { fillColor: [240, 248, 255] },
-    columnStyles: {
-      1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' },
-      4: { halign: 'center' }, 5: { halign: 'right' }, 6: { halign: 'center' },
-    },
-    didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index === 4) {
-        const val = parseFloat(data.cell.raw);
-        if (val >= 60) data.cell.styles.textColor = BRAND.green;
-        else if (val < 30) data.cell.styles.textColor = BRAND.red;
-        else data.cell.styles.textColor = BRAND.amber;
-      }
-      if (data.section === 'body' && data.column.index === 6) {
-        const val = parseFloat(data.cell.raw);
-        if (!isNaN(val)) data.cell.styles.textColor = val >= 100 ? BRAND.green : BRAND.red;
-      }
-    },
-  });
-  y = pdf.lastAutoTable.finalY + 10;
+    { headColor: BRAND.accent, colWidths: [35, 18, 26, 26, 22, 26, 22], pageH }
+  );
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
   // DEAL TABLES
-  // ═══════════════════════════════════════════════════════════════════════════
-  const dealSections = [
-    { title: 'Closed Won Deals', subtitle: 'Confirmed revenue', deals: boardPlan.closedWonDeals, color: BRAND.green },
-    { title: 'Negotiating Deals', subtitle: 'In active negotiation — at risk', deals: boardPlan.negotiatingDeals, color: BRAND.amber },
-    { title: 'Quoting Deals', subtitle: 'Proposals sent — potential upside', deals: boardPlan.quotingDeals, color: BRAND.purple },
-    { title: 'Early Stage Pipeline', subtitle: 'Lead / Qualified — future pipeline', deals: boardPlan.earlyStageDeals, color: BRAND.muted },
+  // ═══════════════════════════════════════════════════════════════════
+  const sections = [
+    { title: 'Closed Won Deals', sub: 'Confirmed revenue', deals: boardPlan.closedWonDeals, color: BRAND.green },
+    { title: 'Negotiating Deals', sub: 'In negotiation — at risk', deals: boardPlan.negotiatingDeals, color: BRAND.amber },
+    { title: 'Quoting Deals', sub: 'Proposals sent', deals: boardPlan.quotingDeals, color: BRAND.purple },
+    { title: 'Early Stage Pipeline', sub: 'Lead / Qualified', deals: boardPlan.earlyStageDeals, color: BRAND.muted },
   ];
 
-  for (const section of dealSections) {
-    if (section.deals.length === 0) continue;
+  for (const sec of sections) {
+    if (sec.deals.length === 0) continue;
     ensureSpace(40);
-    sectionHeading(section.title, `${section.subtitle} — ${section.deals.length} deals`);
+    heading(sec.title, `${sec.sub} — ${sec.deals.length} deals`);
 
-    const totalRev = section.deals.reduce((s, d) => s + d.revenue, 0);
-    const totalGP = section.deals.reduce((s, d) => s + d.profit, 0);
+    const totRev = sec.deals.reduce((s, d) => s + d.revenue, 0);
+    const totGP = sec.deals.reduce((s, d) => s + d.profit, 0);
 
-    autoTable(pdf, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [['Customer', 'Rep', 'Type', 'Service', 'Revenue', 'GP', 'Start']],
-      body: section.deals.sort((a, b) => b.profit - a.profit).map(d => [
-        d.customer, d.owner, d.dealType, d.serviceType || '—',
-        money(d.revenue), money(d.profit), d.billingStart || d.predictedMonth || '—',
+    y = drawTable(pdf, y, margin, contentW,
+      ['Customer', 'Rep', 'Type', { text: 'Revenue', align: 'right' }, { text: 'GP', align: 'right' }, 'Start'],
+      sec.deals.sort((a, b) => b.profit - a.profit).map(d => [
+        d.customer, d.owner, d.dealType,
+        { text: money(d.revenue), align: 'right' },
+        { text: money(d.profit), align: 'right', color: BRAND.green },
+        d.billingStart || d.predictedMonth || '—',
       ]),
-      foot: [['TOTAL', '', '', '', money(totalRev), money(totalGP), '']],
-      theme: 'striped',
-      styles: { fontSize: 8, cellPadding: 2.5, textColor: [40, 40, 40], overflow: 'ellipsize' },
-      headStyles: { fillColor: section.color, textColor: BRAND.white, fontStyle: 'bold', fontSize: 8 },
-      footStyles: { fillColor: section.color, textColor: BRAND.white, fontStyle: 'bold', fontSize: 8 },
-      alternateRowStyles: { fillColor: [245, 248, 252] },
-      columnStyles: {
-        0: { cellWidth: 38 }, 1: { cellWidth: 24 }, 2: { cellWidth: 22 }, 3: { cellWidth: 22 },
-        4: { halign: 'right', cellWidth: 22 }, 5: { halign: 'right', cellWidth: 18 }, 6: { cellWidth: 22 },
-      },
-    });
-    y = pdf.lastAutoTable.finalY + 8;
+      { headColor: sec.color, fontSize: 8, rowHeight: 6, colWidths: [42, 26, 25, 26, 22, 26], footRow: ['TOTAL', '', '', money(totRev), money(totGP), ''], pageH }
+    );
+    y += 4;
   }
 
   // GP by Service Type
-  if (boardPlan.gpByServiceType && boardPlan.gpByServiceType.length > 0) {
+  if (boardPlan.gpByServiceType?.length > 0) {
     ensureSpace(40);
-    sectionHeading('GP by Service Type', 'Non-recurring gross profit breakdown');
-    const totalSvcGP = boardPlan.gpByServiceType.reduce((s, st) => s + st.value, 0);
-    autoTable(pdf, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [['Service Type', 'GP', '% of Total']],
-      body: boardPlan.gpByServiceType.map(s => [
-        s.name, money(s.value), totalSvcGP > 0 ? pct(s.value / totalSvcGP) : '0%',
-      ]),
-      theme: 'striped',
-      styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40] },
-      headStyles: { fillColor: BRAND.purple, textColor: BRAND.white, fontStyle: 'bold', fontSize: 9 },
-      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'center' } },
-    });
-    y = pdf.lastAutoTable.finalY + 10;
+    heading('GP by Service Type', 'Non-recurring gross profit breakdown');
+    const totalSvc = boardPlan.gpByServiceType.reduce((s, st) => s + st.value, 0);
+    y = drawTable(pdf, y, margin, contentW,
+      ['Service Type', { text: 'GP', align: 'right' }, { text: '% of Total', align: 'right' }],
+      boardPlan.gpByServiceType.map(s => [s.name, { text: money(s.value), align: 'right' }, { text: totalSvc > 0 ? pct(s.value / totalSvc) : '0%', align: 'right' }]),
+      { headColor: BRAND.purple, colWidths: [60, 50, 50], pageH }
+    );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // METHODOLOGY & DISCLAIMER
-  // ═══════════════════════════════════════════════════════════════════════════
-  ensureSpace(60);
-  y += 10;
-  pdf.setDrawColor(...BRAND.muted);
-  pdf.setLineWidth(0.3);
-  pdf.line(margin, y, margin + contentW, y);
-  y += 8;
-
-  pdf.setFontSize(10);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(...BRAND.muted);
-  pdf.text('Notes & Methodology', margin, y);
-  y += 6;
-
-  pdf.setFontSize(8);
-  pdf.setFont('helvetica', 'normal');
-  const notes = [
-    'Rule of 78 (R78) weighting applied to recurring GP based on billing start date. Cal Year: Jan=12/78 to Dec=1/78. FY: Oct=12/78 to Sep=1/78.',
-    '"Closed/Won Only" = confirmed deals only. "Full Forecast" = CW + Negotiating as modelled in Business Plan.',
-    'MDF (Market Development Fund) shown as separate offset between Gross Profit and Net Profit.',
-    'Pipeline bands: Large recurring >= £1,000/mo MRR, Large non-recurring >= £10,000. Low-value recurring < £300/mo.',
-    'Rep target: £24,000 monthly recurring GP per sales rep (business plan benchmark).',
-    'Auto-generated from uploaded Board Business Plan Excel. Figures match the source spreadsheet.',
-  ];
-  notes.forEach(line => {
+  // ═══════════════════════════════════════════════════════════════════
+  // NOTES
+  // ═══════════════════════════════════════════════════════════════════
+  ensureSpace(60); y += 10;
+  pdf.setDrawColor(...BRAND.muted); pdf.setLineWidth(0.3);
+  pdf.line(margin, y, margin + contentW, y); y += 8;
+  pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.muted);
+  pdf.text('Notes & Methodology', margin, y); y += 6;
+  pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+  [
+    'R78 weighting: Cal Year Jan=12/78 to Dec=1/78. FY Oct=12/78 to Sep=1/78.',
+    '"CW Only" = confirmed deals. "Full Forecast" = CW + Negotiating per Business Plan.',
+    'MDF shown as separate offset between Gross Profit and Net Profit.',
+    'Deal bands: Large recurring ≥ £1,000/mo MRR, Large NR ≥ £10,000.',
+    'Rep target: £24,000 monthly recurring GP per sales rep.',
+    'Auto-generated from uploaded Board Business Plan Excel.',
+  ].forEach(line => {
     ensureSpace(8);
-    const lines = pdf.splitTextToSize('• ' + line, contentW);
-    pdf.text(lines, margin, y);
-    y += lines.length * 3.8 + 1;
+    const l = pdf.splitTextToSize('• ' + line, contentW);
+    pdf.text(l, margin, y); y += l.length * 3.8 + 1;
   });
 
-  // ── Page footers on all pages ──
-  const totalPages = pdf.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
+  // Page footers
+  const tp = pdf.getNumberOfPages();
+  for (let i = 2; i <= tp; i++) {
     pdf.setPage(i);
-    if (i === 1) continue; // Cover has its own
-    pdf.setFontSize(8);
-    pdf.setTextColor(...BRAND.muted);
+    pdf.setFontSize(8); pdf.setTextColor(...BRAND.muted);
     pdf.text(`Unleashed — Board Sales Report | ${dateStr}`, margin, pageH - 8);
-    pdf.text(`Page ${i} of ${totalPages}`, pageW - margin, pageH - 8, { align: 'right' });
-    pdf.setDrawColor(...BRAND.accent);
-    pdf.setLineWidth(0.3);
+    pdf.text(`Page ${i} of ${tp}`, pageW - margin, pageH - 8, { align: 'right' });
+    pdf.setDrawColor(...BRAND.accent); pdf.setLineWidth(0.3);
     pdf.line(margin, pageH - 12, pageW - margin, pageH - 12);
   }
 
-  // ── SAVE (download, not print) ──
+  // DOWNLOAD (not print!)
   const filename = `Unleashed-Board-Sales-Report-${new Date().toISOString().split('T')[0]}.pdf`;
   pdf.save(filename);
   return filename;
