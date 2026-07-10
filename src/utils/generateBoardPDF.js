@@ -22,7 +22,7 @@ const money = (v) => {
 
 const pct = (v) => (v * 100).toFixed(1) + '%';
 
-// ── Manual table drawing (no jspdf-autotable dependency) ─────────────────────
+// -- Manual table drawing (no jspdf-autotable dependency) ---------------------
 
 function drawTable(pdf, startY, margin, contentW, head, body, opts = {}) {
   const { headColor = BRAND.accent, fontSize = 9, rowHeight = 7, colWidths, footRow, pageH = 297 } = opts;
@@ -111,7 +111,7 @@ function drawTable(pdf, startY, margin, contentW, head, body, opts = {}) {
   return y + 2;
 }
 
-// ── Narrative Analysis Engine ────────────────────────────────────────────────
+// -- Narrative Analysis Engine ------------------------------------------------
 
 function analyseData(boardPlan, r78Data) {
   const {
@@ -163,15 +163,15 @@ function analyseData(boardPlan, r78Data) {
   const domSvc = sortedSvc[0];
   const domPct = totalSvcGP > 0 && domSvc ? domSvc.value / totalSvcGP : 0;
 
-  // ── Narratives ──
-  // Use the SAME figures as the dashboard — R78-weighted annual GP
+  // -- Narratives --
+  // Use the SAME figures as the dashboard -- R78-weighted annual GP
   const cwOnlyTotalGP = r78Data?.cwOnlyTotalGP || 0;
   const cwOnlyRecGP = r78Data?.cwOnlyRecGP || 0;
   const cwOnlyNRGP = r78Data?.cwOnlyNRGP || 0;
   const cwOnlyGross = cwOnlyTotalGP - totalCostTotal;
   const gap = cwOnlyGross < 0 ? Math.abs(cwOnlyGross) : 0;
 
-  // ── Delivery duration: use spreadsheet column if available, else only flag known risky types ──
+  // -- Delivery duration: use spreadsheet column if available, else only flag known risky types --
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const parseMonth = (m) => {
     if (!m) return null;
@@ -196,12 +196,12 @@ function analyseData(boardPlan, r78Data) {
     const desc = (d.description || '').toLowerCase();
     if (desc.includes('vcto') || desc.includes('audit') || desc.includes('vct')) return 120;
     if (desc.includes('migrat')) return 60;
-    return 0; // unknown — don't guess
+    return 0; // unknown -- don't guess
   };
 
   const theGood = [], theBad = [], trends = [];
 
-  // ── Build gap bridge deals with delivery risk ──
+  // -- Build gap bridge deals with delivery risk --
   const gapBridgeDeals = negotiatingDeals.map(d => {
     const deliveryDays = getDeliveryDays(d);
     const closeParsed = parseMonth(d.predictedMonth || d.billingStart);
@@ -215,7 +215,7 @@ function analyseData(boardPlan, r78Data) {
       dealType: d.dealType || '',
       monthlyGP: d.profit,
       expectedClose: d.predictedMonth || d.billingStart || 'TBC',
-      billingStart: deliveryDays > 0 ? fmtMonth(billingParsed) : '—',
+      billingStart: deliveryDays > 0 ? fmtMonth(billingParsed) : '--',
       deliveryDays,
       billsThisYear,
       hasDeliveryRisk,
@@ -239,7 +239,7 @@ function analyseData(boardPlan, r78Data) {
     .map(([month, data]) => `${month}: ${data.count} deal${data.count > 1 ? 's' : ''} (${money(data.gp)}/mo GP)`)
     .join(', ');
 
-  // ── The Good ──
+  // -- The Good --
   if (closedWonDeals.length > 0 && cwOnlyTotalGP > 0) {
     theGood.push(`${closedWonDeals.length} deals closed and won, contributing ${money(cwOnlyTotalGP)} GP to the year (R78-weighted: ${money(cwOnlyRecGP)} recurring + ${money(cwOnlyNRGP)} non-recurring).`);
   }
@@ -249,15 +249,15 @@ function analyseData(boardPlan, r78Data) {
   if (closeMonthSummary) {
     theGood.push(`We are looking to close the remaining ${money(gap)} gap across the following months: ${closeMonthSummary}.`);
   }
-  if (breakevenMonth) theGood.push(`Recurring GP covers costs from ${breakevenMonth.month} — self-sustaining position reached.`);
+  if (breakevenMonth) theGood.push(`Recurring GP covers costs from ${breakevenMonth.month} -- self-sustaining position reached.`);
   if (avgGrowth > 0) theGood.push(`Recurring GP trending upward with avg. monthly growth of ${money(avgGrowth)}.`);
   const strongReps = repPerformance.filter(r => r.pctTarget >= 60);
   if (strongReps.length > 0) theGood.push(`${strongReps.map(r => r.owner).join(' & ')} tracking above 60% of £24k target.`);
   if (mdfTotal > 0) theGood.push(`MDF contributes ${money(mdfTotal)} as an additional profit buffer.`);
 
-  // ── The Bad ──
+  // -- The Bad --
   if (gap > 0) {
-    theBad.push(`Closed/Won deals generate ${money(cwOnlyTotalGP)} GP against ${money(totalCostTotal)} in costs — a gap of ${money(gap)}. The business is reliant on closing negotiating pipeline to bridge this gap.`);
+    theBad.push(`Closed/Won deals generate ${money(cwOnlyTotalGP)} GP against ${money(totalCostTotal)} in costs -- a gap of ${money(gap)}. The business is reliant on closing negotiating pipeline to bridge this gap.`);
   }
   if (netProfitTotal < 0) theBad.push(`Even with negotiating deals, forecast shows a net loss of ${money(Math.abs(netProfitTotal))}. Cost control and pipeline conversion are critical.`);
 
@@ -265,39 +265,39 @@ function analyseData(boardPlan, r78Data) {
   if (atRiskDeals.length > 0) {
     const atRiskNames = atRiskDeals.map(d => `${d.customer} (${d.deliveryDays}-day delivery, closes ${d.expectedClose})`).join('; ');
     theBad.push(`DELIVERY RISK: ${atRiskDeals.length} deal${atRiskDeals.length > 1 ? 's' : ''} totalling ${money(atRiskGP)}/mo GP may not bill before December due to delivery timelines. VCTo audits require 120 days, migrations 50-60 days. At-risk deals: ${atRiskNames}.`);
-    theBad.push(`The challenge is not just closing these deals — it is delivering them. Billing start date follows completion of delivery. Deals closing after August with 120-day delivery timelines will not accrue revenue before calendar year end.`);
+    theBad.push(`The challenge is not just closing these deals -- it is delivering them. Billing start date follows completion of delivery. Deals closing after August with 120-day delivery timelines will not accrue revenue before calendar year end.`);
   }
   if (gapBridgeDeals.length > 0 && gap > 0) {
     theBad.push(`${negotiatingDeals.length} deals bridge the ${money(gap)} gap (${money(totalNegGP)}/mo GP total). See "Deals Bridging the Gap" table for customer, value, expected close, delivery time and billing start.`);
   }
   const weakReps = repPerformance.filter(r => r.pctTarget < 30 && r.dealCount > 0);
-  if (weakReps.length > 0) theBad.push(`${weakReps.map(r => r.owner).join(' & ')} below 30% of £24k target — action plans needed.`);
-  if (!breakevenMonth) theBad.push(`Recurring GP doesn't cover costs in forecast period — reliant on non-recurring revenue.`);
+  if (weakReps.length > 0) theBad.push(`${weakReps.map(r => r.owner).join(' & ')} below 30% of £24k target -- action plans needed.`);
+  if (!breakevenMonth) theBad.push(`Recurring GP doesn't cover costs in forecast period -- reliant on non-recurring revenue.`);
 
   const totalPCount = pipelineRecurring.length;
   if (totalPCount > 0 && pipelineBigRecurring.length / totalPCount > 0.5)
-    trends.push({ title: 'High-Value Pipeline Concentration', type: 'warning', text: `${pipelineBigRecurring.length}/${totalPCount} recurring pipeline deals (${pct(pipelineBigRecurring.length / totalPCount)}) are ≥${money(MRR_HIGH)}/mo. Heavy weighting toward large deals = longer cycles + higher slippage risk.` });
+    trends.push({ title: 'High-Value Pipeline Concentration', type: 'warning', text: `${pipelineBigRecurring.length}/${totalPCount} recurring pipeline deals (${pct(pipelineBigRecurring.length / totalPCount)}) are >=${money(MRR_HIGH)}/mo. Heavy weighting toward large deals = longer cycles + higher slippage risk.` });
   if (totalPCount > 0 && pipelineSmallRecurring.length < 3)
     trends.push({ title: pipelineSmallRecurring.length === 0 ? 'No Small Deal Pipeline' : 'Low-Value Pipeline Gap', type: pipelineSmallRecurring.length === 0 ? 'critical' : 'warning',
       text: pipelineSmallRecurring.length === 0 ? `Zero low-value recurring deals (<${money(MRR_LOW)}/mo) in pipeline. Entire pipeline is mid-to-large, creating concentration risk.` : `Only ${pipelineSmallRecurring.length} deals below ${money(MRR_LOW)}/mo. Need smaller, faster-closing deals for pipeline breadth.` });
 
   const recPct = allDeals.length > 0 ? recurringDeals.length / allDeals.length : 0;
   if (recPct < 0.4) trends.push({ title: 'Low Recurring Ratio', type: 'warning', text: `Only ${pct(recPct)} of deals are recurring. Target 60%+ for predictable revenue.` });
-  else if (recPct >= 0.6) trends.push({ title: 'Strong Recurring Mix', type: 'positive', text: `${pct(recPct)} of deals are recurring — good revenue predictability.` });
+  else if (recPct >= 0.6) trends.push({ title: 'Strong Recurring Mix', type: 'positive', text: `${pct(recPct)} of deals are recurring -- good revenue predictability.` });
 
   const avgMRR = recurringDeals.length > 0 ? recurringDeals.reduce((s, d) => s + d.revenue, 0) / recurringDeals.length : 0;
   const avgNR = nonRecurringDeals.length > 0 ? nonRecurringDeals.reduce((s, d) => s + d.revenue, 0) / nonRecurringDeals.length : 0;
-  trends.push({ title: 'Average Deal Values', type: 'info', text: `Avg recurring MRR: ${money(avgMRR)}/mo | Avg NR value: ${money(avgNR)}. ${avgMRR > MRR_HIGH ? 'Deals skew large — ensure lower-value volume.' : avgMRR < MRR_LOW ? 'Deals small — look for anchor accounts.' : 'Healthy mid-range.'}` });
+  trends.push({ title: 'Average Deal Values', type: 'info', text: `Avg recurring MRR: ${money(avgMRR)}/mo | Avg NR value: ${money(avgNR)}. ${avgMRR > MRR_HIGH ? 'Deals skew large -- ensure lower-value volume.' : avgMRR < MRR_LOW ? 'Deals small -- look for anchor accounts.' : 'Healthy mid-range.'}` });
 
   if (domPct > 0.6 && domSvc) trends.push({ title: 'Service Concentration', type: 'info', text: `${domSvc.name} = ${pct(domPct)} of NR GP. Diversification reduces risk.` });
 
   const sizeDist = [
-    { band: `Large (≥${money(MRR_HIGH)}/mo)`, count: bigRecurring.length, gp: bigRecurring.reduce((s, d) => s + d.profit, 0), p: recurringDeals.length > 0 ? pct(bigRecurring.length / recurringDeals.length) : '0%' },
+    { band: `Large (>=${money(MRR_HIGH)}/mo)`, count: bigRecurring.length, gp: bigRecurring.reduce((s, d) => s + d.profit, 0), p: recurringDeals.length > 0 ? pct(bigRecurring.length / recurringDeals.length) : '0%' },
     { band: `Mid (${money(MRR_LOW)}-${money(MRR_HIGH)})`, count: midRecurring.length, gp: midRecurring.reduce((s, d) => s + d.profit, 0), p: recurringDeals.length > 0 ? pct(midRecurring.length / recurringDeals.length) : '0%' },
     { band: `Small (<${money(MRR_LOW)}/mo)`, count: smallRecurring.length, gp: smallRecurring.reduce((s, d) => s + d.profit, 0), p: recurringDeals.length > 0 ? pct(smallRecurring.length / recurringDeals.length) : '0%' },
   ];
   const nrDist = [
-    { band: `Large (≥${money(NRR_HIGH)})`, count: bigNR.length, gp: bigNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(bigNR.length / nonRecurringDeals.length) : '0%' },
+    { band: `Large (>=${money(NRR_HIGH)})`, count: bigNR.length, gp: bigNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(bigNR.length / nonRecurringDeals.length) : '0%' },
     { band: `Mid`, count: midNR.length, gp: midNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(midNR.length / nonRecurringDeals.length) : '0%' },
     { band: `Small (<${money(NRR_LOW)})`, count: smallNR.length, gp: smallNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(smallNR.length / nonRecurringDeals.length) : '0%' },
   ];
@@ -305,7 +305,7 @@ function analyseData(boardPlan, r78Data) {
   return { theGood, theBad, trends, sizeDist, nrDist, repPerformance, breakevenMonth, gapBridgeDeals, gap, cwOnlyTotalGP, totalCostTotal };
 }
 
-// ── PDF Generator ────────────────────────────────────────────────────────────
+// -- PDF Generator ------------------------------------------------------------
 
 export async function generateBoardPDF(boardPlan, r78Data = {}) {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
@@ -355,9 +355,9 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
 
   const R = (align) => ({ align: align || 'right' });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // COVER PAGE
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   pdf.setFillColor(...BRAND.navy); pdf.rect(0, 0, pageW, pageH, 'F');
   pdf.setFillColor(...BRAND.accent); pdf.rect(0, 0, pageW, 4, 'F');
 
@@ -403,16 +403,16 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   ];
   stages.forEach((st, i) => {
     pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...st.col);
-    pdf.text(`${st.l}: ${st.c} deals — ${money(st.gp)}/mo GP`, margin + 4, 198 + i * 10);
+    pdf.text(`${st.l}: ${st.c} deals -- ${money(st.gp)}/mo GP`, margin + 4, 198 + i * 10);
   });
 
   pdf.setFontSize(8); pdf.setTextColor(...BRAND.muted);
-  pdf.text('CONFIDENTIAL — For Board & Senior Leadership Only', pageW / 2, pageH - 20, { align: 'center' });
+  pdf.text('CONFIDENTIAL -- For Board & Senior Leadership Only', pageW / 2, pageH - 20, { align: 'center' });
   pdf.setFillColor(...BRAND.accent); pdf.rect(0, pageH - 4, pageW, 4, 'F');
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // EXECUTIVE SUMMARY
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   pdf.addPage(); y = margin;
   pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
   pdf.text('Executive Summary', margin, y + 4); y += 8;
@@ -425,11 +425,11 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   y += 4;
 
   heading('The Bad', 'Risks, concerns and areas requiring attention');
-  if (analysis.theBad.length === 0) bullet('No significant concerns — all on track.', BRAND.green);
+  if (analysis.theBad.length === 0) bullet('No significant concerns -- all on track.', BRAND.green);
   analysis.theBad.forEach(item => bullet(item, BRAND.red));
   y += 4;
 
-  // ── Deals Bridging the Gap table ──
+  // -- Deals Bridging the Gap table --
   if (analysis.gapBridgeDeals.length > 0 && analysis.gap > 0) {
     heading('Deals Bridging the Gap', `CW GP: ${money(analysis.cwOnlyTotalGP)} | Costs: ${money(analysis.totalCostTotal)} | Gap: ${money(analysis.gap)} -- these negotiating deals must close AND deliver to reach profitability`);
     const gapRows = analysis.gapBridgeDeals.map(d => {
@@ -471,9 +471,9 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     y += 4;
   }
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // SALES TRENDS
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   pdf.addPage(); y = margin;
   pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
   pdf.text('Sales Trends & Pipeline Analysis', margin, y + 4); y += 12;
@@ -498,9 +498,9 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // FINANCIAL OVERVIEW
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   pdf.addPage(); y = margin;
   pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
   pdf.text('Financial Overview', margin, y + 4); y += 12;
@@ -517,12 +517,12 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     ['Recurring GP (R78)', { text: money(cwRecGP), align: 'right' }, { text: money(boardPlan.closedRecurringGP), align: 'right' }, { text: money(boardPlan.closedRecurringGP - cwRecGP), align: 'right' }],
     ['Non-Recurring GP', { text: money(cwNRGP), align: 'right' }, { text: money(boardPlan.closedNonRecurringGP), align: 'right' }, { text: money(boardPlan.closedNonRecurringGP - cwNRGP), align: 'right' }],
     [{ text: 'Total GP', bold: true }, { text: money(cwTotGP), align: 'right', bold: true }, { text: money(boardPlan.totalGPTotal), align: 'right', bold: true }, { text: money(boardPlan.totalGPTotal - cwTotGP), align: 'right', bold: true }],
-    ['Total Costs', { text: money(boardPlan.totalCostTotal), align: 'right', color: BRAND.red }, { text: money(boardPlan.totalCostTotal), align: 'right', color: BRAND.red }, { text: '—', align: 'right' }],
+    ['Total Costs', { text: money(boardPlan.totalCostTotal), align: 'right', color: BRAND.red }, { text: money(boardPlan.totalCostTotal), align: 'right', color: BRAND.red }, { text: '--', align: 'right' }],
     [{ text: 'Gross Profit', bold: true }, { text: money(cwGross), align: 'right', bold: true, color: cwGross >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.grossProfitTotal), align: 'right', bold: true, color: boardPlan.grossProfitTotal >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.grossProfitTotal - cwGross), align: 'right' }],
   ];
-  if (boardPlan.mdfTotal) fRows.push(['MDF Offset', { text: '+' + money(boardPlan.mdfTotal), align: 'right' }, { text: '+' + money(boardPlan.mdfTotal), align: 'right' }, { text: '—', align: 'right' }]);
+  if (boardPlan.mdfTotal) fRows.push(['MDF Offset', { text: '+' + money(boardPlan.mdfTotal), align: 'right' }, { text: '+' + money(boardPlan.mdfTotal), align: 'right' }, { text: '--', align: 'right' }]);
   fRows.push([{ text: 'Net Profit', bold: true }, { text: money(cwNet), align: 'right', bold: true, color: cwNet >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.netProfitTotal), align: 'right', bold: true, color: boardPlan.netProfitTotal >= 0 ? BRAND.green : BRAND.red }, { text: money(boardPlan.netProfitTotal - cwNet), align: 'right' }]);
-  fRows.push(['EBITDA', { text: '—', align: 'right' }, { text: money(boardPlan.ebitdaTotal), align: 'right' }, { text: '—', align: 'right' }]);
+  fRows.push(['EBITDA', { text: '--', align: 'right' }, { text: money(boardPlan.ebitdaTotal), align: 'right' }, { text: '--', align: 'right' }]);
 
   y = drawTable(pdf, y, margin, contentW,
     ['Metric', { text: 'CW Only', align: 'right' }, { text: 'Full Forecast', align: 'right' }, { text: 'Variance', align: 'right' }],
@@ -538,9 +538,9 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     { headColor: BRAND.red, colWidths: [100, 70], footRow: ['TOTAL', money(boardPlan.totalCostTotal)], pageH }
   );
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // JANUARY STARTING POSITION
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   y += 6;
   ensureSpace(60);
   heading('January ' + (new Date().getFullYear() + 1) + ' Starting Position', 'Monthly recurring GP vs monthly costs entering the new year');
@@ -587,9 +587,9 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   const janLines = pdf.splitTextToSize(janNarrative, contentW);
   janLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // MONTHLY P&L
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   pdf.addPage(); y = margin;
   pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
   pdf.text('Monthly P&L Forecast', margin, y + 4); y += 12;
@@ -615,9 +615,9 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     footRow: plFoot, pageH
   });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // REP PERFORMANCE
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   y += 6;
   ensureSpace(60);
   heading('Sales Rep Performance', 'Target: £24,000 monthly recurring GP per rep');
@@ -629,18 +629,18 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
       { text: money(r.cwRecGP), align: 'right' },
       { text: money(r.totalGP), align: 'right' },
       { text: r.pctTarget.toFixed(0) + '%', align: 'right', color: r.pctTarget >= 60 ? BRAND.green : r.pctTarget < 30 ? BRAND.red : BRAND.amber },
-      { text: r.annualCost > 0 ? money(r.annualCost) : '—', align: 'right' },
-      { text: r.annualCost > 0 ? ((r.totalGP / r.annualCost) * 100).toFixed(0) + '%' : '—', align: 'right', color: r.annualCost > 0 ? (r.totalGP >= r.annualCost ? BRAND.green : BRAND.red) : BRAND.muted },
+      { text: r.annualCost > 0 ? money(r.annualCost) : '--', align: 'right' },
+      { text: r.annualCost > 0 ? ((r.totalGP / r.annualCost) * 100).toFixed(0) + '%' : '--', align: 'right', color: r.annualCost > 0 ? (r.totalGP >= r.annualCost ? BRAND.green : BRAND.red) : BRAND.muted },
     ]),
     { headColor: BRAND.accent, colWidths: [35, 18, 26, 26, 22, 26, 22], pageH }
   );
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // DEAL TABLES
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   const sections = [
     { title: 'Closed Won Deals', sub: 'Confirmed revenue', deals: boardPlan.closedWonDeals, color: BRAND.green },
-    { title: 'Negotiating Deals', sub: 'In negotiation — at risk', deals: boardPlan.negotiatingDeals, color: BRAND.amber },
+    { title: 'Negotiating Deals', sub: 'In negotiation -- at risk', deals: boardPlan.negotiatingDeals, color: BRAND.amber },
     { title: 'Quoting Deals', sub: 'Proposals sent', deals: boardPlan.quotingDeals, color: BRAND.purple },
     { title: 'Early Stage Pipeline', sub: 'Lead / Qualified', deals: boardPlan.earlyStageDeals, color: BRAND.muted },
   ];
@@ -648,7 +648,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   for (const sec of sections) {
     if (sec.deals.length === 0) continue;
     ensureSpace(40);
-    heading(sec.title, `${sec.sub} — ${sec.deals.length} deals`);
+    heading(sec.title, `${sec.sub} -- ${sec.deals.length} deals`);
 
     const totRev = sec.deals.reduce((s, d) => s + d.revenue, 0);
     const totGP = sec.deals.reduce((s, d) => s + d.profit, 0);
@@ -681,9 +681,9 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   // NOTES
-  // ═══════════════════════════════════════════════════════════════════
+  // ===================================================================
   ensureSpace(60); y += 10;
   pdf.setDrawColor(...BRAND.muted); pdf.setLineWidth(0.3);
   pdf.line(margin, y, margin + contentW, y); y += 8;
@@ -694,12 +694,12 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     'R78 weighting: Cal Year Jan=12/78 to Dec=1/78. FY Oct=12/78 to Sep=1/78.',
     '"CW Only" = confirmed deals. "Full Forecast" = CW + Negotiating per Business Plan.',
     'MDF shown as separate offset between Gross Profit and Net Profit.',
-    'Deal bands: Large recurring ≥ £1,000/mo MRR, Large NR ≥ £10,000.',
+    'Deal bands: Large recurring >= £1,000/mo MRR, Large NR >= £10,000.',
     'Rep target: £24,000 monthly recurring GP per sales rep.',
     'Auto-generated from uploaded Board Business Plan Excel.',
   ].forEach(line => {
     ensureSpace(8);
-    const l = pdf.splitTextToSize('• ' + line, contentW);
+    const l = pdf.splitTextToSize('* ' + line, contentW);
     pdf.text(l, margin, y); y += l.length * 3.8 + 1;
   });
 
@@ -708,7 +708,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   for (let i = 2; i <= tp; i++) {
     pdf.setPage(i);
     pdf.setFontSize(8); pdf.setTextColor(...BRAND.muted);
-    pdf.text(`Unleashed — Board Sales Report | ${dateStr}`, margin, pageH - 8);
+    pdf.text(`Unleashed -- Board Sales Report | ${dateStr}`, margin, pageH - 8);
     pdf.text(`Page ${i} of ${tp}`, pageW - margin, pageH - 8, { align: 'right' });
     pdf.setDrawColor(...BRAND.accent); pdf.setLineWidth(0.3);
     pdf.line(margin, pageH - 12, pageW - margin, pageH - 12);
