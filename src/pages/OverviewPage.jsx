@@ -146,7 +146,8 @@ function BoardPlanDashboard({ boardPlan }) {
   const {
     monthlyData, costBreakdown, gpByServiceType, gpByRep, employeeCosts,
     closedTotalGP, closedRecurringGP, closedNonRecurringGP,
-    totalCostTotal, ebitdaTotal, cumulativeEBITDAFinal,
+    totalCostTotal, totalGPTotal, grossProfitTotal, netProfitTotal,
+    ebitdaTotal, cumulativeEBITDAFinal, mdfTotal,
     closedWonDeals, negotiatingDeals, quotingDeals, earlyStageDeals,
     significantDeals, scenarioLabel,
     closedWonCount, negotiatingCount, quotingCount, earlyStageCount,
@@ -846,6 +847,147 @@ function BoardPlanDashboard({ boardPlan }) {
             </div>
           )}
         </div>
+
+        {/* Year-End Forecast Summary — from Figures tab */}
+        <section className={`${cardClass} report-page`}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-bold text-white">Year-End Forecast Summary</h2>
+              <p className="text-xs text-[#5A7A95]">Based on the Board Business Plan figures — all sales, costs and GP as modelled in the spreadsheet</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-[#5A7A95]">Forecast EBITDA</p>
+              <p className={`text-2xl font-bold ${ebitdaTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(ebitdaTotal)}</p>
+            </div>
+          </div>
+
+          <div className={`rounded-lg bg-[#0D2338] border border-[#2A4A6F] p-3 mb-4`}>
+            <p className="text-xs text-[#A0B4C8] leading-relaxed">
+              <span className="font-semibold text-white">How this works:</span>{' '}
+              These figures come directly from the Business Plan "figures" sheet. Total GP includes accumulated recurring revenue and all non-recurring (consultancy, engineering, managed support, licensing, hardware) projected across the year.
+              Total costs include all wages, NI, pensions, phones, insurance, and marketing/SoPro.
+              Gross Profit is Total GP minus Total Costs. EBITDA factors in MDF offsets.
+              The deal pipeline below shows what is Closed/Won versus still in Negotiation — if all negotiating deals close as expected, the business finishes the year on the figures shown.
+            </p>
+          </div>
+
+          {/* Main P&L summary */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-4">
+            <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs text-[#5A7A95]">Total GP (Sales)</p>
+              <p className="text-2xl font-bold text-[#0EA5E9] mt-1">{money(totalGPTotal)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">Recurring + non-recurring GP</p>
+            </div>
+            <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs text-[#5A7A95]">Total Costs</p>
+              <p className="text-2xl font-bold text-[#ef4444] mt-1">{money(totalCostTotal)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">Wages, NI, pensions, overheads</p>
+            </div>
+            <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs text-[#5A7A95]">Gross Profit</p>
+              <p className={`text-2xl font-bold mt-1 ${grossProfitTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(grossProfitTotal)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">GP minus all costs</p>
+            </div>
+            <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs text-[#5A7A95]">Net Profit</p>
+              <p className={`text-2xl font-bold mt-1 ${netProfitTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(netProfitTotal)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">After all adjustments</p>
+            </div>
+          </div>
+
+          {/* GP breakdown */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 mb-4">
+            <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs text-[#5A7A95]">Recurring GP (Accumulated)</p>
+              <p className="text-xl font-bold text-[#0EA5E9] mt-1">{money(closedRecurringGP)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">Monthly recurring revenue accumulated over the year</p>
+            </div>
+            <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs text-[#5A7A95]">Non-Recurring GP</p>
+              <p className="text-xl font-bold text-[#f59e0b] mt-1">{money(closedNonRecurringGP)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">Consultancy, engineering, hardware, licensing</p>
+            </div>
+            <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs text-[#5A7A95]">EBITDA (after MDF)</p>
+              <p className={`text-xl font-bold mt-1 ${ebitdaTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(ebitdaTotal)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">{mdfTotal ? `Includes ${money(mdfTotal)} MDF offset` : 'After MDF adjustments'}</p>
+            </div>
+          </div>
+
+          {/* Deal pipeline status */}
+          <div className="border-t border-[#2A4A6F] pt-4">
+            <h3 className="text-sm font-bold text-white mb-3">Deal Pipeline Status</h3>
+            <p className="text-xs text-[#A0B4C8] mb-3">
+              The figures above assume all Closed/Won and Negotiating deals land. Below is the current split — {closedWonCount} deals are confirmed, {negotiatingCount} are still in negotiation.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-[#059669]/30 bg-[#059669]/5 p-3">
+                <p className="text-[10px] text-[#059669] font-semibold uppercase tracking-wide">Closed / Won</p>
+                <p className="text-lg font-bold text-white mt-1">{closedWonCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(closedWonDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+              <div className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-3">
+                <p className="text-[10px] text-[#f59e0b] font-semibold uppercase tracking-wide">Negotiating</p>
+                <p className="text-lg font-bold text-white mt-1">{negotiatingCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(negotiatingDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+              <div className="rounded-lg border border-[#8b5cf6]/30 bg-[#8b5cf6]/5 p-3">
+                <p className="text-[10px] text-[#8b5cf6] font-semibold uppercase tracking-wide">Quoting</p>
+                <p className="text-lg font-bold text-white mt-1">{quotingCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(quotingDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+              <div className="rounded-lg border border-[#5A7A95]/30 bg-[#5A7A95]/5 p-3">
+                <p className="text-[10px] text-[#5A7A95] font-semibold uppercase tracking-wide">Early Stage</p>
+                <p className="text-lg font-bold text-white mt-1">{earlyStageCount} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(earlyStageDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly P&L table */}
+          <div className="border-t border-[#2A4A6F] pt-4 mt-4">
+            <h3 className="text-sm font-bold text-white mb-3">Monthly P&amp;L Forecast</h3>
+            <p className="text-xs text-[#A0B4C8] mb-3">Month-by-month breakdown from the Business Plan figures sheet showing how GP, costs and EBITDA build through the year.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[10px]">
+                <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                  <th className="text-left py-1.5 sticky left-0 bg-[#1A334F] min-w-[70px]">Month</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Recurring GP</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Non-Rec GP</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Total GP</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Total Cost</th>
+                  <th className="text-right py-1.5 min-w-[65px]">Net Profit</th>
+                  <th className="text-right py-1.5 min-w-[65px]">EBITDA</th>
+                  <th className="text-right py-1.5 min-w-[75px]">Cumulative</th>
+                </tr></thead>
+                <tbody>
+                  {monthlyData.map((m, i) => (
+                    <tr key={i} className="border-b border-[#2A4A6F]/20 text-white">
+                      <td className="py-1 sticky left-0 bg-[#1A334F] font-medium">{m.month}</td>
+                      <td className="py-1 text-right text-[#0EA5E9]">{money(m.recurringGP)}</td>
+                      <td className="py-1 text-right text-[#f59e0b]">{money(m.nonRecurringGP)}</td>
+                      <td className="py-1 text-right font-medium">{money(m.totalGP)}</td>
+                      <td className="py-1 text-right text-[#ef4444]">{money(m.totalCost)}</td>
+                      <td className={`py-1 text-right ${m.netProfit >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(m.netProfit)}</td>
+                      <td className={`py-1 text-right ${m.ebitda >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(m.ebitda)}</td>
+                      <td className={`py-1 text-right font-bold ${m.cumulativeEBITDA >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(m.cumulativeEBITDA)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-[#0EA5E9] text-white font-bold">
+                    <td className="py-2 sticky left-0 bg-[#1A334F]">Year Total</td>
+                    <td className="py-2 text-right text-[#0EA5E9]">{money(closedRecurringGP)}</td>
+                    <td className="py-2 text-right text-[#f59e0b]">{money(closedNonRecurringGP)}</td>
+                    <td className="py-2 text-right">{money(totalGPTotal)}</td>
+                    <td className="py-2 text-right text-[#ef4444]">{money(totalCostTotal)}</td>
+                    <td className={`py-2 text-right ${netProfitTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(netProfitTotal)}</td>
+                    <td className={`py-2 text-right ${ebitdaTotal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(ebitdaTotal)}</td>
+                    <td className={`py-2 text-right ${cumulativeEBITDAFinal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{money(cumulativeEBITDAFinal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
 
         {/* KPI Cards */}
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

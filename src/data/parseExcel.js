@@ -233,6 +233,8 @@ export function parseBoardPlan(workbook) {
     totalCostTotal,
     totalGPTotal,
     ebitdaTotal: toNum((rows[39] || [])[months.length + 1]),
+    grossProfitTotal: getTotal(35),
+    netProfitTotal: getTotal(37),
     cumulativeEBITDAFinal: cumulativeEBITDA[cumulativeEBITDA.length - 1] || 0,
     mdfTotal: getTotal(32),
     deals,
