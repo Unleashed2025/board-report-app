@@ -163,43 +163,55 @@ function analyseData(boardPlan, r78Data) {
   const domPct = totalSvcGP > 0 && domSvc ? domSvc.value / totalSvcGP : 0;
 
   // ── Narratives ──
-  // Use R78-weighted annual GP figures (not raw monthly sums which are misleading)
+  // Use the SAME figures as the dashboard — R78-weighted annual GP
   const cwOnlyTotalGP = r78Data?.cwOnlyTotalGP || 0;
   const cwOnlyRecGP = r78Data?.cwOnlyRecGP || 0;
   const cwOnlyNRGP = r78Data?.cwOnlyNRGP || 0;
-  const cwRecMonthly = closedWonDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
-  const cwNRTotal = closedWonDeals.filter(d => d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+  const cwOnlyGross = cwOnlyTotalGP - totalCostTotal;
+  const gap = cwOnlyGross < 0 ? Math.abs(cwOnlyGross) : 0;
 
   const theGood = [], theBad = [], trends = [];
 
-  if (closedWonDeals.length > 0) {
-    // Show R78-weighted year contribution, not raw monthly sum
-    if (cwOnlyTotalGP > 0) {
-      theGood.push(`${closedWonDeals.length} deals closed and won. R78-weighted year contribution: ${money(cwOnlyTotalGP)} GP (${money(cwOnlyRecGP)} recurring + ${money(cwOnlyNRGP)} non-recurring). Current monthly recurring run-rate: ${money(cwRecMonthly)}/mo.`);
-    } else {
-      theGood.push(`${closedWonDeals.length} deals closed and won with ${money(cwRecMonthly)}/mo recurring GP and ${money(cwNRTotal)} non-recurring GP.`);
-    }
+  // ── The Good ──
+  if (closedWonDeals.length > 0 && cwOnlyTotalGP > 0) {
+    theGood.push(`${closedWonDeals.length} deals closed and won, contributing ${money(cwOnlyTotalGP)} GP to the year (R78-weighted: ${money(cwOnlyRecGP)} recurring + ${money(cwOnlyNRGP)} non-recurring).`);
   }
-  if (netProfitTotal > 0) theGood.push(`Full forecast (CW + Negotiating) projects net profit of ${money(netProfitTotal)} for the year — viable if negotiating deals land.`);
+  if (netProfitTotal > 0) {
+    theGood.push(`Full forecast (Closed/Won + Negotiating) projects a net profit of ${money(netProfitTotal)} for the year.`);
+  }
+  if (gap > 0 && netProfitTotal > 0) {
+    theGood.push(`The ${money(gap)} CW-only gap is fully bridged by ${negotiatingDeals.length} negotiating deals, delivering ${money(netProfitTotal)} net profit if all close as forecast.`);
+  }
   if (breakevenMonth) theGood.push(`Recurring GP covers costs from ${breakevenMonth.month} — self-sustaining position reached.`);
   if (avgGrowth > 0) theGood.push(`Recurring GP trending upward with avg. monthly growth of ${money(avgGrowth)}.`);
   const strongReps = repPerformance.filter(r => r.pctTarget >= 60);
   if (strongReps.length > 0) theGood.push(`${strongReps.map(r => r.owner).join(' & ')} tracking above 60% of £24k target.`);
-  if (bigRecurring.length > 0) theGood.push(`${bigRecurring.length} high-value recurring deals (≥${money(MRR_HIGH)}/mo MRR) in the pipeline.`);
   if (mdfTotal > 0) theGood.push(`MDF contributes ${money(mdfTotal)} as an additional profit buffer.`);
 
-  if (netProfitTotal < 0) theBad.push(`Forecast shows net loss of ${money(netProfitTotal)}. Cost control and pipeline conversion are critical.`);
-  const cwOnlyGross = cwOnlyTotalGP - totalCostTotal;
-  if (cwOnlyGross < 0 && cwOnlyTotalGP > 0) theBad.push(`On Closed/Won-only basis (R78-weighted), the year-end position is a ${money(Math.abs(cwOnlyGross))} loss. We need negotiating deals to close to break even.`);
+  // ── The Bad ──
+  if (gap > 0) {
+    theBad.push(`Closed/Won deals generate ${money(cwOnlyTotalGP)} GP against ${money(totalCostTotal)} in costs — a gap of ${money(gap)}. The business is reliant on negotiating pipeline to close this gap.`);
+  }
+  if (netProfitTotal < 0) theBad.push(`Even with negotiating deals, forecast shows a net loss of ${money(Math.abs(netProfitTotal))}. Cost control and pipeline conversion are critical.`);
   const weakReps = repPerformance.filter(r => r.pctTarget < 30 && r.dealCount > 0);
   if (weakReps.length > 0) theBad.push(`${weakReps.map(r => r.owner).join(' & ')} below 30% of £24k target — action plans needed.`);
-  const negGPMonthly = negotiatingDeals.reduce((s, d) => s + d.profit, 0);
-  if (negotiatingDeals.length > 3 && negGPMonthly > 0) {
-    const totalForecastGP = totalGPTotal;
-    const negPctOfForecast = totalForecastGP > 0 ? negGPMonthly * 12 / totalForecastGP : 0;
-    theBad.push(`${negotiatingDeals.length} deals still in negotiation (${money(negGPMonthly)}/mo run-rate). A significant portion of forecast GP depends on these closing.`);
-  }
   if (!breakevenMonth) theBad.push(`Recurring GP doesn't cover costs in forecast period — reliant on non-recurring revenue.`);
+
+  // ── Gap Bridge Deals (the negotiating deals that fill the gap) ──
+  const gapBridgeDeals = negotiatingDeals
+    .map(d => ({
+      customer: d.customer || 'Unknown',
+      description: d.description || '',
+      dealType: d.dealType || '',
+      monthlyGP: d.profit,
+      expectedClose: d.predictedMonth || d.billingStart || 'TBC',
+      owner: d.owner || '',
+    }))
+    .sort((a, b) => b.monthlyGP - a.monthlyGP);
+  const totalNegGP = gapBridgeDeals.reduce((s, d) => s + d.monthlyGP, 0);
+  if (gapBridgeDeals.length > 0 && gap > 0) {
+    theBad.push(`The ${negotiatingDeals.length} deals bridging this gap total ${money(totalNegGP)}/mo GP. See "Deals Bridging the Gap" table for full breakdown by customer, value and expected close month.`);
+  }
 
   const totalPCount = pipelineRecurring.length;
   if (totalPCount > 0 && pipelineBigRecurring.length / totalPCount > 0.5)
@@ -229,7 +241,7 @@ function analyseData(boardPlan, r78Data) {
     { band: `Small (<${money(NRR_LOW)})`, count: smallNR.length, gp: smallNR.reduce((s, d) => s + d.profit, 0), p: nonRecurringDeals.length > 0 ? pct(smallNR.length / nonRecurringDeals.length) : '0%' },
   ];
 
-  return { theGood, theBad, trends, sizeDist, nrDist, repPerformance, breakevenMonth };
+  return { theGood, theBad, trends, sizeDist, nrDist, repPerformance, breakevenMonth, gapBridgeDeals, gap, cwOnlyTotalGP, totalCostTotal };
 }
 
 // ── PDF Generator ────────────────────────────────────────────────────────────
@@ -354,6 +366,33 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   heading('The Bad', 'Risks, concerns and areas requiring attention');
   if (analysis.theBad.length === 0) bullet('No significant concerns — all on track.', BRAND.green);
   analysis.theBad.forEach(item => bullet(item, BRAND.red));
+  y += 4;
+
+  // ── Deals Bridging the Gap table ──
+  if (analysis.gapBridgeDeals.length > 0 && analysis.gap > 0) {
+    heading('Deals Bridging the Gap', `CW GP: ${money(analysis.cwOnlyTotalGP)} | Costs: ${money(analysis.totalCostTotal)} | Gap: ${money(analysis.gap)} — these negotiating deals must close to reach profitability`);
+    const gapRows = analysis.gapBridgeDeals.map(d => [
+      d.customer,
+      d.dealType,
+      { text: money(d.monthlyGP), align: 'right' },
+      d.expectedClose,
+      d.owner,
+    ]);
+    const totalNegGP = analysis.gapBridgeDeals.reduce((s, d) => s + d.monthlyGP, 0);
+    gapRows.push([
+      { text: 'TOTAL', bold: true },
+      '',
+      { text: money(totalNegGP), align: 'right', bold: true },
+      '',
+      '',
+    ]);
+    y = drawTable(pdf, y, margin, contentW,
+      ['Customer', 'Type', { text: 'Monthly GP', align: 'right' }, 'Expected Close', 'Owner'],
+      gapRows,
+      { headColor: [180, 40, 40], colWidths: [50, 25, 35, 35, 35], pageH }
+    );
+    y += 4;
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // SALES TRENDS
