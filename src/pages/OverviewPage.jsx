@@ -551,85 +551,46 @@ export default function OverviewPage() {
       </div>
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 5: NEW FY STARTING POSITION
+          SECTION 5: NEW FY POSITION
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
-        title={`New FY Starting Position \u2013 ${fy.newStartMonth}`}
-        subtitle={`What we carry into ${fy.newLabel} (Nov ${fy.newStart} \u2013 Oct ${fy.newStart + 1})`}
+        title={`New FY Position \u2013 ${fy.newLabel}`}
+        subtitle={`Nov ${fy.newStart} \u2013 Oct ${fy.newStart + 1}`}
         accent="#f59e0b"
       />
 
-      <InsightCard accent="#f59e0b">
-        <p className="text-white font-semibold mb-2">Entering {fy.newLabel} \u2013 Closed Won + Negotiation (All Billing Started)</p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-          <div>
-            <p className="text-[#5A7A95] text-xs">Monthly Recurring Revenue</p>
-            <p className="text-[#f59e0b] font-bold text-lg">{money(newFYCombinedBaseSummary.monthlyRev)}</p>
-            <p className="text-[#5A7A95] text-[10px]">{newFYCombinedBaseSummary.recCount} recurring deal(s)</p>
-          </div>
-          <div>
-            <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
-            <p className="text-[#f59e0b] font-bold text-lg">{money(newFYCombinedBaseSummary.monthlyGP)}</p>
-          </div>
-          <div>
-            <p className="text-[#5A7A95] text-xs">Monthly Costs</p>
-            <p className="text-white font-bold text-lg">{money(monthlyCosts)}</p>
-          </div>
-          <div>
-            <p className="text-[#5A7A95] text-xs">Monthly Surplus / Gap</p>
-            <p className={`font-bold text-lg ${newFYCombinedBaseSummary.monthlyGP >= monthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
-              {money(newFYCombinedBaseSummary.monthlyGP - monthlyCosts)}
-            </p>
-          </div>
-        </div>
-      </InsightCard>
-
-      {newFYAllNewDeals.length > 0 && (
+      {/* 1. Already Secured - CW deals billing in new FY */}
+      {newFYNewDeals.length > 0 && (
         <>
-          <SubHeader>Deals Starting Billing in New FY ({newFYAllNewDeals.length}) \u2013 Closed Won + Negotiation</SubHeader>
-          <KPICards summary={newFYAllNewSummary} accent="#f59e0b" />
-          <DealTable deals={newFYAllNewDeals} />
+          <SubHeader>Already Secured (Closed Won \u2013 Billing New FY)</SubHeader>
+          <InsightCard accent="#059669">
+            <p className="text-[#5A7A95] text-xs mb-3">
+              Deals already closed won with billing starting in {fy.newLabel} &mdash; cash coming in without closing new deals.
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
+              <div>
+                <p className="text-[#5A7A95] text-xs">Monthly Recurring Revenue</p>
+                <p className="text-[#059669] font-bold">{money(newFYNewSummary.monthlyRev)}</p>
+              </div>
+              <div>
+                <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
+                <p className="text-[#059669] font-bold">{money(newFYNewSummary.monthlyGP)}</p>
+              </div>
+              <div>
+                <p className="text-[#5A7A95] text-xs">NR Revenue</p>
+                <p className="text-[#059669] font-bold">{money(newFYNewSummary.nrRev)}</p>
+              </div>
+              <div>
+                <p className="text-[#5A7A95] text-xs">NR GP</p>
+                <p className="text-[#059669] font-bold">{money(newFYNewSummary.nrGP)}</p>
+              </div>
+            </div>
+          </InsightCard>
+          <DealTable deals={newFYNewDeals} />
         </>
       )}
 
-      {newFYNewDeals.length > 0 && (
-        <InsightCard accent="#059669">
-          <p className="text-white font-semibold mb-1">Already Secured for New FY (Closed Won)</p>
-          <p className="text-[#5A7A95] text-xs mb-3">
-            These deals are already closed won this FY with billing starting in {fy.newLabel} &mdash; cash coming in without needing to close new deals.
-          </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
-            <div>
-              <p className="text-[#5A7A95] text-xs">Monthly Recurring Revenue</p>
-              <p className="text-[#059669] font-bold">{money(newFYNewSummary.monthlyRev)}</p>
-            </div>
-            <div>
-              <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
-              <p className="text-[#059669] font-bold">{money(newFYNewSummary.monthlyGP)}</p>
-            </div>
-            <div>
-              <p className="text-[#5A7A95] text-xs">NR Revenue</p>
-              <p className="text-[#059669] font-bold">{money(newFYNewSummary.nrRev)}</p>
-            </div>
-            <div>
-              <p className="text-[#5A7A95] text-xs">NR GP</p>
-              <p className="text-[#059669] font-bold">{money(newFYNewSummary.nrGP)}</p>
-            </div>
-          </div>
-          <DealTable deals={newFYNewDeals} />
-        </InsightCard>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════
-          SECTION 6: NEW FY PIPELINE
-         ════════════════════════════════════════════════════════════ */}
-      <SectionHeader
-        title={`New FY Pipeline \u2013 ${fy.newLabel}`}
-        subtitle="All pipeline deals targeting the new financial year"
-        accent="#ef4444"
-      />
-      <KPICards summary={summarise(newFYPipeline)} accent="#ef4444" />
-
+      {/* 2-5. Pipeline by stage: Negotiating, Quoting, Qualified, Lead */}
       {pipelineStages.map(stage => {
         const stageDeals = newFYPipeline.filter(d => d.stage === stage);
         if (!stageDeals.length) return null;
@@ -644,9 +605,63 @@ export default function OverviewPage() {
         );
       })}
 
-      {newFYPipeline.length === 0 && (
-        <p className="text-[#5A7A95] text-sm italic mb-6">No pipeline deals targeting {fy.newLabel}.</p>
+      {newFYPipeline.length === 0 && newFYNewDeals.length === 0 && (
+        <p className="text-[#5A7A95] text-sm italic mb-6">No deals targeting {fy.newLabel}.</p>
       )}
+
+      {/* 6. New FY Financial Forecast - GP vs Costs */}
+      {(() => {
+        const allNewFYDeals = [...newFYNewDeals, ...newFYPipeline];
+        const allNewFYSummary = summarise(allNewFYDeals);
+        // Recurring base carrying forward from current FY
+        const totalNewFYMonthlyGP = newFYCombinedBaseSummary.monthlyGP + allNewFYSummary.monthlyGP;
+        const totalNewFYMonthlyRev = newFYCombinedBaseSummary.monthlyRev + allNewFYSummary.monthlyRev;
+        const totalNewFYNRGP = allNewFYSummary.nrGP;
+        return (
+          <>
+            <SubHeader>New FY Financial Forecast \u2013 GP vs Costs</SubHeader>
+            <InsightCard accent="#f59e0b">
+              <p className="text-white font-semibold mb-3">{fy.newLabel} Forecast (All Deals)</p>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm mb-4">
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Recurring Base (Carrying Forward)</p>
+                  <p className="text-white font-bold">{money(newFYCombinedBaseSummary.monthlyGP)} /mo GP</p>
+                  <p className="text-[#5A7A95] text-[10px]">{newFYCombinedBaseSummary.recCount} deal(s) already billing</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">New FY Deals (Secured + Pipeline)</p>
+                  <p className="text-[#f59e0b] font-bold">+{money(allNewFYSummary.monthlyGP)} /mo GP</p>
+                  <p className="text-[#5A7A95] text-[10px]">{allNewFYDeals.length} deal(s)</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">NR GP (New FY Deals)</p>
+                  <p className="text-amber-400 font-bold">{money(totalNewFYNRGP)}</p>
+                </div>
+              </div>
+              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Total Monthly Revenue (Forecast)</p>
+                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalNewFYMonthlyRev)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Total Monthly GP (Forecast)</p>
+                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalNewFYMonthlyGP)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Monthly Costs</p>
+                  <p className="text-white font-bold text-lg">{money(monthlyCosts)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Forecast Surplus / Gap</p>
+                  <p className={`font-bold text-lg ${totalNewFYMonthlyGP >= monthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(totalNewFYMonthlyGP - monthlyCosts)}
+                  </p>
+                </div>
+              </div>
+            </InsightCard>
+          </>
+        );
+      })()}
 
       {/* ── Footer ── */}
       <div className="border-t border-[#2A4A6F] mt-10 pt-6 text-center">
