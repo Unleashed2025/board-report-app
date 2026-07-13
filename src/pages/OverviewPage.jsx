@@ -327,7 +327,7 @@ function BoardPlanDashboard({ boardPlan }) {
 
   const cwPeriodFilter = (deal) => {
     if (cwPeriod === 'all') return true;
-    const p = parseDealMonth(deal.predictedMonth);
+    const p = parseDealMonth(deal.billingStart || deal.predictedMonth);
     if (!p) return false;
     if (cwPeriod === 'month') return p.year === cwCurYear && p.month === cwCurMonth;
     if (cwPeriod === 'quarter') return p.year === cwCurYear && Math.floor(p.month / 3) === cwCurQuarter;
