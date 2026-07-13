@@ -402,24 +402,44 @@ export default function OverviewPage() {
       </div>
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 1: DEALS CLOSED THIS MONTH
+          SECTION 1: ALL CLOSED WON (ALL TIME)
+         ════════════════════════════════════════════════════════════ */}
+      <SectionHeader
+        title="All Closed Won Deals"
+        subtitle={`${closedWon.length} deals closed won across all time periods \u2014 regardless of billing start date`}
+        accent="#0EA5E9"
+      />
+      <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+        Total value of every deal we have closed. Includes deals billing now, later this FY, and into the next FY. This is our full closed pipeline.
+      </p>
+      <KPICards summary={summarise(cwEnriched)} accent="#0EA5E9" />
+      <DealTable deals={cwEnriched} />
+
+      {/* ════════════════════════════════════════════════════════════
+          SECTION 2: DEALS CLOSED THIS MONTH
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title={`Deals Closed This Month \u2013 ${nowLabel}`}
         subtitle={`${closedThisMonth.length} deal(s) closed won this month`}
         accent="#0EA5E9"
       />
+      <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+        New wins added this calendar month.
+      </p>
       <KPICards summary={summarise(closedThisMonth)} accent="#0EA5E9" />
       <DealTable deals={closedThisMonth} />
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 2: CLOSED WON - CURRENT FY
+          SECTION 3: CLOSED WON - BILLING THIS FY
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title={`Closed Won \u2013 ${fy.label}`}
-        subtitle={`Closed won deals billing within this financial year (Nov ${fy.start} \u2013 Oct ${fy.start + 1})`}
+        subtitle={`Closed won deals with billing starting within this financial year (Nov ${fy.start} \u2013 Oct ${fy.start + 1})`}
         accent="#059669"
       />
+      <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+        Only deals where billing has started or will start before end of {fy.label}. Deals closed but billing next FY are excluded here and shown in the New FY section.
+      </p>
       <KPICards summary={summarise(cwImpactingThisFY)} accent="#059669" />
 
       <SubHeader>Currently Billing ({cwBillingNow.length} deals)</SubHeader>
@@ -433,7 +453,7 @@ export default function OverviewPage() {
       )}
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 3: NEGOTIATION - BILLING THIS FY
+          SECTION 4: NEGOTIATION - BILLING THIS FY
          ════════════════════════════════════════════════════════════ */}
       {negBillThisFY.length > 0 && (
         <>
@@ -442,19 +462,25 @@ export default function OverviewPage() {
             subtitle={`${negBillThisFY.length} deal(s) in negotiation expected to close and start billing before end of ${fy.label}`}
             accent="#06b6d4"
           />
+          <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+            Deals currently being negotiated where we expect to close and begin billing within the current FY. If all close, this GP adds to our end-of-year position.
+          </p>
           <KPICards summary={summarise(negBillThisFY)} accent="#06b6d4" />
           <DealTable deals={negBillThisFY} />
         </>
       )}
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 4: END OF FY POSITION
+          SECTION 5: END OF FY POSITION
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title={`End of FY Position \u2013 ${fy.endMonth}`}
         subtitle="Projected position at the end of the current financial year"
         accent="#8b5cf6"
       />
+      <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+        Shows our monthly recurring GP vs monthly costs at the end of {fy.label}. First view uses confirmed (Closed Won) deals only. Second view adds negotiation deals assuming they all close &mdash; giving a best-case scenario.
+      </p>
 
       <SubHeader>Closed Won Only</SubHeader>
       <InsightCard accent="#8b5cf6">
@@ -559,6 +585,9 @@ export default function OverviewPage() {
         subtitle={`Nov ${fy.newStart} \u2013 Oct ${fy.newStart + 1}`}
         accent="#f59e0b"
       />
+      <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+        Forward-looking view of the next financial year. Starts with deals already secured (closed this FY but billing next FY), then shows pipeline by stage, and finishes with a full financial forecast including planned new hire costs.
+      </p>
 
       {/* 1. Already Secured - CW deals billing in new FY */}
       {newFYNewDeals.length > 0 && (
