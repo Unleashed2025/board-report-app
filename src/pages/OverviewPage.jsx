@@ -1277,6 +1277,155 @@ export default function OverviewPage() {
         );
       })()}
 
+      {/* ════════════════════════════════════════════════════════════
+          HIDDEN BENEFITS - Board Surprise (Alysha)
+         ════════════════════════════════════════════════════════════ */}
+      {(() => {
+        // Alysha: £1k/mo recurring GP starting January, R78 weighted
+        // FY26/27 = Nov 2026 - Oct 2027. Jan = month 3, so 10 months remain (Jan-Oct)
+        const alyshaStartMonth = 2; // Jan = index 2 in FY month order (Nov=0, Dec=1, Jan=2...)
+        const fyMonths = 12;
+        const monthlyRecGP = 1000;
+        // She closes £1k/mo each month from Jan. Each deal bills for remaining FY months.
+        const monthsActive = fyMonths - alyshaStartMonth; // 10 months (Jan-Oct)
+        // R78: deal closed in month X bills for (fyMonths - X) remaining months
+        // Jan(10) + Feb(9) + Mar(8) + Apr(7) + May(6) + Jun(5) + Jul(4) + Aug(3) + Sep(2) + Oct(1)
+        let r78Total = 0;
+        const r78Rows = [];
+        for (let i = 0; i < monthsActive; i++) {
+          const remaining = monthsActive - i;
+          const contribution = monthlyRecGP * remaining;
+          r78Total += contribution;
+          const monthNames = ['Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct'];
+          r78Rows.push({ month: monthNames[alyshaStartMonth + i], remaining, contribution });
+        }
+
+        // NR GP: £5k/mo for 10 months (Jan-Oct)
+        const nrPerMonth = 5000;
+        const totalNRGP = nrPerMonth * monthsActive; // £50k
+
+        // End of FY monthly recurring position: by Oct she has £10k/mo recurring (£1k × 10 months of deals)
+        const endOfFYMonthlyRec = monthlyRecGP * monthsActive; // £10k/mo by year end
+
+        const totalAlyshaGP = r78Total + totalNRGP;
+
+        // Pull in existing end of FY summary figures to show combined
+        const md = boardPlan.monthlyData || [];
+        const newFYMonthlyData = md.filter(m => {
+          const p = parseMonth(m.month);
+          return p && inFY(p, fy.newStart);
+        });
+        const totalFYCostsActual = newFYMonthlyData.reduce((s, m) => s + m.totalCost, 0);
+
+        return (
+          <div className="mt-12 border-t-2 border-dashed border-[#f59e0b]/40 pt-8">
+            <SectionHeader
+              title="Hidden Benefits - Board Surprise"
+              subtitle="Additional GP not included in main forecast figures above"
+              accent="#a855f7"
+            />
+            <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+              Alysha's predicted contribution is excluded from the main forecast as a positive surprise for the board. These figures sit on top of everything shown above.
+            </p>
+
+            <InsightCard accent="#a855f7">
+              <p className="text-white font-semibold mb-4">Alysha - Predicted GP Contribution ({fy.newLabel})</p>
+
+              {/* Recurring R78 */}
+              <div className="mb-4">
+                <p className="text-[#a855f7] font-semibold text-sm mb-2">Recurring GP (Rule of 78) - Starting January</p>
+                <p className="text-[#5A7A95] text-[10px] mb-3">
+                  Closing £1,000/mo GP each month from January. Each deal accumulates billing for the remainder of the FY.
+                </p>
+                <div className="overflow-x-auto mb-3">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                        <th className="text-left py-1 pr-3">Month Closed</th>
+                        <th className="text-right py-1 pr-3">GP/mo</th>
+                        <th className="text-right py-1 pr-3">FY Months</th>
+                        <th className="text-right py-1 text-[#a855f7]">FY Contribution</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r78Rows.map((r, i) => (
+                        <tr key={i} className="border-b border-[#2A4A6F]/30 text-white/80">
+                          <td className="py-1 pr-3">{r.month}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{money(monthlyRecGP)}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{r.remaining}/12</td>
+                          <td className="py-1 text-right font-mono text-[#a855f7] font-semibold">{money(r.contribution)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-[#2A4A6F] font-semibold text-white">
+                        <td colSpan={3} className="py-2 pr-3 text-right">Total R78 Recurring GP</td>
+                        <td className="py-2 text-right font-mono text-[#a855f7]">{money(r78Total)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* NR GP */}
+              <div className="mb-4">
+                <p className="text-amber-400 font-semibold text-sm mb-2">Non-Recurring GP - Project Work</p>
+                <p className="text-[#5A7A95] text-[10px] mb-2">
+                  £5,000/mo NR GP from January to October ({monthsActive} months)
+                </p>
+                <p className="text-amber-400 font-bold text-lg">{money(totalNRGP)}</p>
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-[#5A7A95] text-xs">R78 Recurring GP</p>
+                  <p className="text-[#a855f7] font-bold text-lg">{money(r78Total)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">NR GP (Projects)</p>
+                  <p className="text-amber-400 font-bold text-lg">{money(totalNRGP)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Total Alysha GP</p>
+                  <p className="text-white font-bold text-xl">{money(totalAlyshaGP)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">End of FY Monthly Rec (+)</p>
+                  <p className="text-[#059669] font-bold text-lg">+{money(endOfFYMonthlyRec)}/mo</p>
+                  <p className="text-[#5A7A95] text-[10px]">Added to recurring base</p>
+                </div>
+              </div>
+            </InsightCard>
+
+            {/* Impact on End of FY Summary */}
+            <div className={`${card} mt-4 mb-6 border-l-4 border-l-[#a855f7]`}>
+              <p className="text-white font-semibold mb-3">Impact on {fy.newLabel} End of Year Position</p>
+              <p className="text-[#5A7A95] text-[10px] mb-4 italic">
+                Shows what the FY figures look like with Alysha's contribution added on top of the main forecast.
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Additional FY GP (Alysha)</p>
+                  <p className="text-[#a855f7] font-bold text-lg">+{money(totalAlyshaGP)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">R78 {money(r78Total)} + NR {money(totalNRGP)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Additional Monthly Rec (End of FY)</p>
+                  <p className="text-[#059669] font-bold text-lg">+{money(endOfFYMonthlyRec)}/mo</p>
+                  <p className="text-[#5A7A95] text-[10px]">Carrying into following year</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Total FY Costs</p>
+                  <p className="text-red-400 font-bold text-lg">{money(totalFYCostsActual)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">Unchanged - already included in main forecast</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       </>)}
 
       {/* ── Footer ── */}
