@@ -90,8 +90,26 @@ function KPICards({ summary, accent = '#0EA5E9' }) {
   );
 }
 
-function DealTable({ deals, showStage = false }) {
+function DealTable({ deals, showStage = false, fyStart }) {
   if (!deals.length) return <p className="text-[#5A7A95] text-sm italic mb-4">No deals in this category.</p>;
+
+  // R78 calculation: months a deal bills within the FY (Nov fyStart - Oct fyStart+1)
+  const calcR78 = (d) => {
+    if (!fyStart || d.dealType !== 'Recurring') return null;
+    const bp = parseMonth(d.billingStart);
+    if (!bp) return { months: 12, value: d.profit * 12 };
+    const fyStartYM = fyStart * 12 + 10; // Nov
+    const fyEndYM = (fyStart + 1) * 12 + 9; // Oct
+    const dealYM = bp.year * 12 + bp.month;
+    if (dealYM <= fyStartYM) return { months: 12, value: d.profit * 12 };
+    const remaining = fyEndYM - dealYM + 1;
+    const months = Math.max(0, Math.min(12, remaining));
+    return { months, value: d.profit * months };
+  };
+
+  const showR78 = !!fyStart;
+  const totalR78 = showR78 ? deals.reduce((s, d) => { const r = calcR78(d); return s + (r ? r.value : (d.dealType !== 'Recurring' ? d.profit : 0)); }, 0) : 0;
+
   return (
     <div className="overflow-x-auto mb-6">
       <table className="w-full text-sm">
@@ -106,11 +124,15 @@ function DealTable({ deals, showStage = false }) {
             <th className="text-left py-2 pr-3">Close Month</th>
             <th className="text-left py-2 pr-3">Billing Start</th>
             <th className="text-right py-2 pr-3">Revenue</th>
-            <th className="text-right py-2">GP</th>
+            <th className="text-right py-2 pr-3">GP/mo</th>
+            {showR78 && <th className="text-right py-2 pr-3 text-[#f59e0b]">FY Months</th>}
+            {showR78 && <th className="text-right py-2 text-[#f59e0b]">FY Contribution</th>}
           </tr>
         </thead>
         <tbody>
-          {deals.map(d => (
+          {deals.map(d => {
+            const r78 = calcR78(d);
+            return (
             <tr key={d.id} className="border-b border-[#2A4A6F]/40 text-white/90">
               <td className="py-2 pr-3 font-medium">{d.customer}</td>
               <td className="py-2 pr-3">{d.owner}</td>
@@ -129,15 +151,20 @@ function DealTable({ deals, showStage = false }) {
               <td className="py-2 pr-3">{monthName(parseMonth(d.predictedMonth))}</td>
               <td className="py-2 pr-3">{monthName(parseMonth(d.billingStart))}</td>
               <td className="py-2 pr-3 text-right font-mono">{money(d.revenue)}</td>
-              <td className="py-2 text-right font-mono">{money(d.profit)}</td>
+              <td className="py-2 pr-3 text-right font-mono">{money(d.profit)}</td>
+              {showR78 && <td className="py-2 pr-3 text-right font-mono text-[#f59e0b]">{r78 ? `${r78.months}/12` : '-'}</td>}
+              {showR78 && <td className="py-2 text-right font-mono text-[#f59e0b] font-semibold">{r78 ? money(r78.value) : money(d.profit)}</td>}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t border-[#2A4A6F] text-white font-semibold">
             <td colSpan={showStage ? 8 : 7} className="py-2 pr-3 text-right">Total</td>
             <td className="py-2 pr-3 text-right font-mono">{money(deals.reduce((s, d) => s + d.revenue, 0))}</td>
-            <td className="py-2 text-right font-mono">{money(deals.reduce((s, d) => s + d.profit, 0))}</td>
+            <td className="py-2 pr-3 text-right font-mono">{money(deals.reduce((s, d) => s + d.profit, 0))}</td>
+            {showR78 && <td className="py-2 pr-3 text-right font-mono text-[#f59e0b]"></td>}
+            {showR78 && <td className="py-2 text-right font-mono text-[#f59e0b] font-bold">{money(totalR78)}</td>}
           </tr>
         </tfoot>
       </table>
@@ -453,12 +480,12 @@ export default function OverviewPage() {
       <KPICards summary={summarise(cwImpactingThisFY)} accent="#059669" />
 
       <SubHeader>Currently Billing ({cwBillingNow.length} deals)</SubHeader>
-      <DealTable deals={cwBillingNow} />
+      <DealTable deals={cwBillingNow} fyStart={fy.start} />
 
       {cwDueThisFY.length > 0 && (
         <>
           <SubHeader>Due to Start Billing This FY ({cwDueThisFY.length} deals)</SubHeader>
-          <DealTable deals={cwDueThisFY} />
+          <DealTable deals={cwDueThisFY} fyStart={fy.start} />
         </>
       )}
 
@@ -476,7 +503,7 @@ export default function OverviewPage() {
             Deals currently being negotiated where we expect to close and begin billing within the current FY. If all close, this GP adds to our end-of-year position.
           </p>
           <KPICards summary={summarise(negBillThisFY)} accent="#06b6d4" />
-          <DealTable deals={negBillThisFY} />
+          <DealTable deals={negBillThisFY} fyStart={fy.start} />
         </>
       )}
 
@@ -658,7 +685,7 @@ export default function OverviewPage() {
               </div>
             </div>
           </InsightCard>
-          <DealTable deals={newFYNewDeals} />
+          <DealTable deals={newFYNewDeals} fyStart={fy.newStart} />
         </>
       )}
 
@@ -672,7 +699,7 @@ export default function OverviewPage() {
             <SubHeader>
               {stage} ({stageDeals.length} deals) &middot; {money(s.monthlyGP)} monthly GP &middot; {money(s.nrGP)} NR GP
             </SubHeader>
-            <DealTable deals={stageDeals} showStage={false} />
+            <DealTable deals={stageDeals} showStage={false} fyStart={fy.newStart} />
           </div>
         );
       })}
