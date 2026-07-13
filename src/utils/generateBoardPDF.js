@@ -588,6 +588,118 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   janLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
 
   // ===================================================================
+  // NEW FY POSITION
+  // ===================================================================
+  pdf.addPage(); y = margin;
+  pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+  pdf.text('New FY Starting Position', margin, y + 4); y += 12;
+
+  // Determine FY boundaries
+  const fyNow = new Date();
+  const fyCurMonth = fyNow.getMonth();
+  const fyCurYear = fyNow.getFullYear();
+  const fyStartYr = fyCurMonth >= 9 ? fyCurYear : fyCurYear - 1;
+  const newFYStartYr = fyStartYr + 1;
+  const fyMonthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const parseBillStart = (bs) => {
+    if (!bs) return null;
+    const parts = String(bs).split(' ');
+    const mi = fyMonthNames.indexOf(parts[0]);
+    const yr = parseInt(parts[1]);
+    if (mi === -1 || isNaN(yr)) return null;
+    return { mi, yr };
+  };
+  const isBeforeNewFYPdf = (bs) => {
+    const p = parseBillStart(bs);
+    if (!p) return false;
+    return (p.yr < newFYStartYr) || (p.yr === newFYStartYr && p.mi < 9);
+  };
+  const isInNewFYPdf = (bs) => {
+    const p = parseBillStart(bs);
+    if (!p) return false;
+    return (p.yr === newFYStartYr && p.mi >= 9) || (p.yr === newFYStartYr + 1 && p.mi <= 8);
+  };
+
+  // Recurring CW billing before new FY (carrying forward)
+  const fyRecCarrying = boardPlan.closedWonDeals.filter(d => d.dealType === 'Recurring' && isBeforeNewFYPdf(d.billingStart));
+  const fyRecCarryingGP = fyRecCarrying.reduce((s, d) => s + d.profit, 0);
+  const fyRecCarryingRev = fyRecCarrying.reduce((s, d) => s + d.revenue, 0);
+
+  // Recurring CW billing starts in new FY
+  const fyRecNewFY = boardPlan.closedWonDeals.filter(d => d.dealType === 'Recurring' && isInNewFYPdf(d.billingStart));
+  const fyRecNewFYGP = fyRecNewFY.reduce((s, d) => s + d.profit, 0);
+
+  // NR CW deals billing in new FY
+  const fyNRDeferred = boardPlan.closedWonDeals.filter(d => d.dealType !== 'Recurring' && !isBeforeNewFYPdf(d.billingStart));
+  const fyNRDeferredGP = fyNRDeferred.reduce((s, d) => s + d.profit, 0);
+  const fyNRDeferredRev = fyNRDeferred.reduce((s, d) => s + d.revenue, 0);
+
+  // Negotiating recurring that would carry
+  const fyNegRecCarrying = boardPlan.negotiatingDeals.filter(d => d.dealType === 'Recurring' && isBeforeNewFYPdf(d.billingStart));
+  const fyNegRecCarryingGP = fyNegRecCarrying.reduce((s, d) => s + d.profit, 0);
+
+  // Pipeline totals
+  const fyNegAll = boardPlan.negotiatingDeals;
+  const fyQuoting = (boardPlan.quotingDeals || []);
+  const fyEarly = (boardPlan.earlyStageDeals || []);
+
+  const fyMonthlyCost = boardPlan.monthlyData[boardPlan.monthlyData.length - 1]?.totalCost || boardPlan.totalCostTotal / 12;
+  const fyTotalRecGP = fyRecCarryingGP + fyRecNewFYGP;
+  const fyGapCW = fyTotalRecGP - fyMonthlyCost;
+  const fyGapForecast = (fyTotalRecGP + fyNegRecCarryingGP) - fyMonthlyCost;
+
+  heading(`Entering Oct ${newFYStartYr} - Sep ${newFYStartYr + 1}`, 'Confirmed monthly recurring position + pipeline for the new financial year');
+
+  // Summary table
+  const fyPosHead = ['', { text: 'CW Only', align: 'right' }, { text: '+ Negotiating', align: 'right' }, { text: 'Forecast', align: 'right' }];
+  const fyPosBody = [
+    ['Monthly Recurring Revenue', { text: money(fyRecCarryingRev) + '/mo', align: 'right' }, { text: '+' + money(fyNegRecCarrying.reduce((s, d) => s + d.revenue, 0)) + '/mo', align: 'right', color: BRAND.amber }, { text: money(fyRecCarryingRev + fyNegRecCarrying.reduce((s, d) => s + d.revenue, 0)) + '/mo', align: 'right' }],
+    ['Monthly Recurring GP', { text: money(fyTotalRecGP) + '/mo', align: 'right', color: BRAND.green }, { text: '+' + money(fyNegRecCarryingGP) + '/mo', align: 'right', color: BRAND.amber }, { text: money(fyTotalRecGP + fyNegRecCarryingGP) + '/mo', align: 'right', color: BRAND.green }],
+    [{ text: 'Monthly Costs', bold: true }, { text: money(fyMonthlyCost) + '/mo', align: 'right', color: BRAND.red }, { text: '-', align: 'right' }, { text: money(fyMonthlyCost) + '/mo', align: 'right', color: BRAND.red }],
+    [{ text: 'Monthly Surplus / (Gap)', bold: true }, { text: money(fyGapCW) + '/mo', align: 'right', bold: true, color: fyGapCW >= 0 ? BRAND.green : BRAND.red }, { text: '+' + money(fyNegRecCarryingGP), align: 'right', color: BRAND.amber }, { text: money(fyGapForecast) + '/mo', align: 'right', bold: true, color: fyGapForecast >= 0 ? BRAND.green : BRAND.red }],
+    [{ text: 'Annualised Surplus / (Gap)', bold: true }, { text: money(fyGapCW * 12), align: 'right', bold: true, color: fyGapCW >= 0 ? BRAND.green : BRAND.red }, { text: '-', align: 'right' }, { text: money(fyGapForecast * 12), align: 'right', bold: true, color: fyGapForecast >= 0 ? BRAND.green : BRAND.red }],
+  ];
+  drawTable(pdf, fyPosHead, fyPosBody, margin, y, contentW, { headerBg: [13, 35, 56], rowHeight: 7 });
+  y += 7 + fyPosBody.length * 7 + 5;
+
+  // NR deferred cash
+  if (fyNRDeferred.length > 0) {
+    ensureSpace(30);
+    heading('Non-Recurring Revenue (Billing in New FY)', 'Closed-Won project/NR deals generating cash flow in the new FY');
+    const nrHead = ['Customer', 'Description', 'Service', 'Billing', { text: 'Revenue', align: 'right' }, { text: 'GP', align: 'right' }];
+    const nrBody = fyNRDeferred.map(d => [
+      d.customer, (d.description || '').substring(0, 25), d.serviceType || '', d.billingStart || '',
+      { text: money(d.revenue), align: 'right' }, { text: money(d.profit), align: 'right', color: BRAND.amber }
+    ]);
+    nrBody.push([{ text: 'Total NR in New FY', bold: true }, '', '', '', { text: money(fyNRDeferredRev), align: 'right', bold: true }, { text: money(fyNRDeferredGP), align: 'right', bold: true, color: BRAND.amber }]);
+    drawTable(pdf, nrHead, nrBody, margin, y, contentW, { headerBg: [13, 35, 56], rowHeight: 6 });
+    y += 7 + nrBody.length * 6 + 5;
+  }
+
+  // Pipeline summary
+  ensureSpace(30);
+  heading('Pipeline for New FY', 'Deals in Negotiating, Quoting, Qualified, and Lead stages');
+  const pipeHead = ['Stage', { text: 'Deals', align: 'right' }, { text: 'Revenue', align: 'right' }, { text: 'GP', align: 'right' }];
+  const pipeBody = [
+    ['Negotiating', { text: String(fyNegAll.length), align: 'right' }, { text: money(fyNegAll.reduce((s, d) => s + d.revenue, 0)), align: 'right' }, { text: money(fyNegAll.reduce((s, d) => s + d.profit, 0)), align: 'right', color: BRAND.amber }],
+    ['Quoting', { text: String(fyQuoting.length), align: 'right' }, { text: money(fyQuoting.reduce((s, d) => s + d.revenue, 0)), align: 'right' }, { text: money(fyQuoting.reduce((s, d) => s + d.profit, 0)), align: 'right' }],
+    ['Qualified / Lead', { text: String(fyEarly.length), align: 'right' }, { text: money(fyEarly.reduce((s, d) => s + d.revenue, 0)), align: 'right' }, { text: money(fyEarly.reduce((s, d) => s + d.profit, 0)), align: 'right' }],
+    [{ text: 'Total Pipeline', bold: true }, { text: String(fyNegAll.length + fyQuoting.length + fyEarly.length), align: 'right', bold: true }, { text: money(fyNegAll.reduce((s, d) => s + d.revenue, 0) + fyQuoting.reduce((s, d) => s + d.revenue, 0) + fyEarly.reduce((s, d) => s + d.revenue, 0)), align: 'right', bold: true }, { text: money(fyNegAll.reduce((s, d) => s + d.profit, 0) + fyQuoting.reduce((s, d) => s + d.profit, 0) + fyEarly.reduce((s, d) => s + d.profit, 0)), align: 'right', bold: true }],
+  ];
+  drawTable(pdf, pipeHead, pipeBody, margin, y, contentW, { headerBg: [13, 35, 56], rowHeight: 7 });
+  y += 7 + pipeBody.length * 7 + 5;
+
+  // FY narrative
+  ensureSpace(20);
+  pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+  const fyNarrative = fyGapCW < 0
+    ? `Entering the new FY, confirmed recurring GP of ${money(fyTotalRecGP)}/mo against ${money(fyMonthlyCost)}/mo costs leaves a ${money(Math.abs(fyGapCW))}/mo gap. ${fyGapForecast >= 0 ? `If negotiating deals close, surplus of ${money(fyGapForecast)}/mo.` : `Even with negotiating deals, still ${money(Math.abs(fyGapForecast))}/mo short.`}${fyNRDeferred.length > 0 ? ` Additionally ${money(fyNRDeferredGP)} NR GP from ${fyNRDeferred.length} closed deals will bill in the new FY.` : ''}`
+    : `Strong position entering new FY -- confirmed recurring GP of ${money(fyTotalRecGP)}/mo covers ${money(fyMonthlyCost)}/mo costs with ${money(fyGapCW)}/mo surplus.${fyNRDeferred.length > 0 ? ` Plus ${money(fyNRDeferredGP)} NR project revenue.` : ''}`;
+  const fyNarrLines = pdf.splitTextToSize(fyNarrative, contentW);
+  fyNarrLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
+
+  // ===================================================================
   // MONTHLY P&L
   // ===================================================================
   pdf.addPage(); y = margin;
