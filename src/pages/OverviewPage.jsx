@@ -675,10 +675,31 @@ export default function OverviewPage() {
       {(() => {
         const allNewFYDeals = [...newFYNewDeals, ...newFYPipeline];
         const allNewFYSummary = summarise(allNewFYDeals);
-        // Recurring base carrying forward from current FY
-        const totalNewFYMonthlyGP = newFYCombinedBaseSummary.monthlyGP + allNewFYSummary.monthlyGP;
-        const totalNewFYMonthlyRev = newFYCombinedBaseSummary.monthlyRev + allNewFYSummary.monthlyRev;
+
+        // R78 calculation: how many months each deal bills within the FY
+        // FY runs Nov (newStart) to Oct (newStart+1). A deal billing from month X gets remaining months.
+        const fyStartYM = fy.newStart * 12 + 10; // Nov of new FY start year
+        const fyEndYMNew = (fy.newStart + 1) * 12 + 9; // Oct of new FY end year
+        const calcR78Months = (deal) => {
+          const bp = deal._bill || parseMonth(deal.billingStart);
+          if (!bp) return 12; // assume full year if unknown
+          const dealYM = bp.year * 12 + bp.month;
+          if (dealYM <= fyStartYM) return 12; // already billing before FY start = full year
+          const remaining = fyEndYMNew - dealYM + 1;
+          return Math.max(0, Math.min(12, remaining));
+        };
+
+        // Recurring base (carrying forward) = full 12 months
+        const baseR78GP = newFYCombinedBaseSummary.monthlyGP * 12;
+        // New FY deals get R78-weighted months
+        const newDealsR78GP = allNewFYDeals
+          .filter(d => d.dealType === 'Recurring')
+          .reduce((s, d) => s + d.profit * calcR78Months(d), 0);
+        const totalRecR78GP = baseR78GP + newDealsR78GP;
+        // NR GP (one-time, counted in full)
         const totalNewFYNRGP = allNewFYSummary.nrGP;
+        // Total FY GP
+        const totalFYGP = totalRecR78GP + totalNewFYNRGP;
 
         // New hire costs for new FY
         const newHires = (boardPlan.newHireCosts || []).filter(h => {
@@ -687,49 +708,56 @@ export default function OverviewPage() {
         });
         const newHireMonthlyCost = newHires.reduce((s, h) => s + h.totalMonthlyCost, 0);
         const newFYMonthlyCosts = monthlyCosts + newHireMonthlyCost;
+        const totalFYCosts = newFYMonthlyCosts * 12;
+
+        // New hire predicted GP (R78 for 10 months from Jan)
+        const hireR78GP = (1000 + 300) * 55; // sum(1..10) = 55
+        const hireNRGP = (5000 + 2000) * 10;
+        const totalWithHireGP = totalFYGP + hireR78GP + hireNRGP;
 
         return (
           <>
             <SubHeader>New FY Financial Forecast \u2013 GP vs Costs</SubHeader>
             <InsightCard accent="#f59e0b">
-              <p className="text-white font-semibold mb-3">{fy.newLabel} Forecast (All Deals)</p>
+              <p className="text-white font-semibold mb-3">{fy.newLabel} Forecast (R78-Weighted)</p>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm mb-4">
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Recurring Base (Carrying Forward)</p>
-                  <p className="text-white font-bold">{money(newFYCombinedBaseSummary.monthlyGP)} /mo GP</p>
-                  <p className="text-[#5A7A95] text-[10px]">{newFYCombinedBaseSummary.recCount} deal(s) already billing</p>
+                  <p className="text-[#5A7A95] text-xs">Recurring Base (12 months)</p>
+                  <p className="text-white font-bold">{money(baseR78GP)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">{newFYCombinedBaseSummary.recCount} deal(s) × 12mo @ {money(newFYCombinedBaseSummary.monthlyGP)}/mo</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">New FY Deals (Secured + Pipeline)</p>
-                  <p className="text-[#f59e0b] font-bold">+{money(allNewFYSummary.monthlyGP)} /mo GP</p>
-                  <p className="text-[#5A7A95] text-[10px]">{allNewFYDeals.length} deal(s)</p>
+                  <p className="text-[#5A7A95] text-xs">New Deals Recurring (R78)</p>
+                  <p className="text-[#f59e0b] font-bold">{money(newDealsR78GP)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">{allNewFYDeals.filter(d => d.dealType === 'Recurring').length} deal(s) weighted by billing start</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">NR GP (New FY Deals)</p>
+                  <p className="text-[#5A7A95] text-xs">NR GP (Project Work)</p>
                   <p className="text-amber-400 font-bold">{money(totalNewFYNRGP)}</p>
                 </div>
               </div>
               <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Total Monthly Revenue (Forecast)</p>
-                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalNewFYMonthlyRev)}</p>
+                  <p className="text-[#5A7A95] text-xs">Total FY GP (Pipeline)</p>
+                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalFYGP)}</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Total Monthly GP (Forecast)</p>
-                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalNewFYMonthlyGP)}</p>
+                  <p className="text-[#5A7A95] text-xs">Total FY Costs</p>
+                  <p className="text-red-400 font-bold text-lg">{money(totalFYCosts)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">{money(newFYMonthlyCosts)}/mo × 12</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Monthly Costs (incl. new hires)</p>
-                  <p className="text-white font-bold text-lg">{money(newFYMonthlyCosts)}</p>
-                  {newHireMonthlyCost > 0 && (
-                    <p className="text-[#5A7A95] text-[10px]">Current: {money(monthlyCosts)} + New hires: {money(newHireMonthlyCost)}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-[#5A7A95] text-xs">Forecast Surplus / Gap</p>
-                  <p className={`font-bold text-lg ${totalNewFYMonthlyGP >= newFYMonthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
-                    {money(totalNewFYMonthlyGP - newFYMonthlyCosts)}
+                  <p className="text-[#5A7A95] text-xs">FY P&amp;L (Pipeline Only)</p>
+                  <p className={`font-bold text-lg ${totalFYGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(totalFYGP - totalFYCosts)}
                   </p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">FY P&amp;L (+ New Hire GP)</p>
+                  <p className={`font-bold text-lg ${totalWithHireGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(totalWithHireGP - totalFYCosts)}
+                  </p>
+                  <p className="text-[#5A7A95] text-[10px]">+{money(hireR78GP + hireNRGP)} predicted</p>
                 </div>
               </div>
             </InsightCard>
