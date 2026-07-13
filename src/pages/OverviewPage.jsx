@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import Layout from '../components/Layout';
 import { useData } from '../data/DataContext.jsx';
 import { generateBoardPDF } from '../utils/generateBoardPDF.js';
@@ -173,7 +174,20 @@ export default function OverviewPage() {
   const [authenticated, setAuthenticated] = useState(() => sessionStorage.getItem(SESSION_KEY) === 'true');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { boardPlan, dataLoaded } = useData();
+  const { boardPlan, dataLoaded, updateFromExcel, lastUpdated, sourceFilename } = useData();
+  const fileRef = useRef(null);
+
+  const handleReupload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const wb = XLSX.read(evt.target.result, { type: 'array' });
+      updateFromExcel(wb, file.name);
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -317,16 +331,33 @@ export default function OverviewPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Board Sales Dashboard</h1>
           <p className="text-[#5A7A95] text-sm">{fy.label} &middot; Nov {fy.start} &ndash; Oct {fy.start + 1}</p>
+          {lastUpdated && (
+            <p className="text-[#5A7A95] text-[10px] mt-1">
+              Data: {sourceFilename} &middot; Uploaded {lastUpdated.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+          )}
         </div>
-        <button
-          onClick={() => generateBoardPDF(boardPlan)}
-          className="px-5 py-2.5 rounded-lg bg-[#0EA5E9] text-white text-sm font-semibold hover:bg-[#0EA5E9]/90 transition-colors flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Export PDF
-        </button>
+        <div className="flex items-center gap-3">
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleReupload} className="hidden" />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="px-4 py-2.5 rounded-lg border border-[#2A4A6F] text-[#BAE6FD] text-sm font-medium hover:border-[#0EA5E9] transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Re-upload
+          </button>
+          <button
+            onClick={() => generateBoardPDF(boardPlan)}
+            className="px-5 py-2.5 rounded-lg bg-[#0EA5E9] text-white text-sm font-semibold hover:bg-[#0EA5E9]/90 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Export PDF
+          </button>
+        </div>
       </div>
 
       {/* ── Top-level summary cards ── */}

@@ -5,11 +5,40 @@ const TARGET_YEAR = 2026;
 const MANAGED_SUPPORT_WHITESPACE = 169120;
 export const stageList = ['Lead', 'To Be Contacted', 'Qualified', 'Quoting', 'Negotiating', 'Closed-Won', 'Closed-Lost'];
 
-// Excel serial date → "YYYY-MM" month label
+// Excel serial date → "Mon YYYY" label
 function serialToMonthLabel(serial) {
   if (typeof serial !== 'number' || serial < 40000) return '';
   const d = new Date((serial - 25569) * 86400 * 1000);
   return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+// Parse any date value (serial number, Date object, or text string) → "Mon YYYY"
+function parseDateToMonthLabel(val) {
+  if (val == null || val === '') return '';
+  // Excel serial number
+  if (typeof val === 'number' && val > 40000) return serialToMonthLabel(val);
+  // Date object (xlsx sometimes returns these)
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return val.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  }
+  // Text string - try parsing
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return '';
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+    }
+    // Try UK format DD/MM/YYYY
+    const parts = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (parts) {
+      const ukDate = new Date(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1]));
+      if (!isNaN(ukDate.getTime())) {
+        return ukDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+      }
+    }
+  }
+  return '';
 }
 
 /**
@@ -180,8 +209,8 @@ export function parseBoardPlan(workbook) {
         if (id === 'Totals') break;
         const predMonth = row[tHeaders.indexOf('Predicted Sales Month')];
         const billStart = row[tHeaders.indexOf('Predicted Billing Start Date')];
-        const parsedPredMonth = typeof predMonth === 'number' && predMonth > 40000 ? serialToMonthLabel(predMonth) : '';
-        const parsedBillStart = typeof billStart === 'number' && billStart > 40000 ? serialToMonthLabel(billStart) : '';
+        const parsedPredMonth = parseDateToMonthLabel(predMonth);
+        const parsedBillStart = parseDateToMonthLabel(billStart);
         const deliveryDaysCol = tHeaders.indexOf('Delivery Days');
         const deliveryDaysVal = deliveryDaysCol !== -1 ? toNum(row[deliveryDaysCol]) : 0;
         deals.push({
