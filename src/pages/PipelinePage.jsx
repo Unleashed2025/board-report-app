@@ -74,7 +74,7 @@ export default function PipelinePage() {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const currentQuarter = Math.floor(currentMonth / 3);
-  const fyStartYear = currentMonth >= 9 ? currentYear : currentYear - 1;
+  const fyStartYear = currentMonth >= 10 ? currentYear : currentYear - 1;
 
   const parseMonth = (label) => {
     if (!label) return null;
@@ -92,8 +92,8 @@ export default function PipelinePage() {
   const isNextQuarter = (p) => p && p.year === nextQYear && Math.floor(p.month / 3) === nextQ;
   const isThisFY = (p) => {
     if (!p) return false;
-    if (p.year === fyStartYear && p.month >= 9) return true;
-    if (p.year === fyStartYear + 1 && p.month <= 8) return true;
+    if (p.year === fyStartYear && p.month >= 10) return true;
+    if (p.year === fyStartYear + 1 && p.month <= 9) return true;
     return false;
   };
   const isThisCalYear = (p) => p && p.year === currentYear;
@@ -103,7 +103,7 @@ export default function PipelinePage() {
     { label: 'This Month', subtitle: `${monthNames[currentMonth]} ${currentYear}`, filter: isThisMonth },
     { label: 'This Quarter', subtitle: `Q${currentQuarter + 1} ${currentYear}`, filter: isThisQuarter },
     { label: 'Next Quarter', subtitle: `Q${nextQ + 1} ${nextQYear}`, filter: isNextQuarter },
-    { label: 'This FY', subtitle: `Oct ${fyStartYear} \u2013 Sep ${fyStartYear + 1}`, filter: isThisFY },
+    { label: 'This FY', subtitle: `Nov ${fyStartYear} \u2013 Oct ${fyStartYear + 1}`, filter: isThisFY },
     { label: 'Calendar Year', subtitle: `Jan \u2013 Dec ${currentYear}`, filter: isThisCalYear },
   ];
 
