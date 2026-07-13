@@ -472,6 +472,252 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   }
 
   // ===================================================================
+  // HOW CAN WE BRIDGE THE LOSS (only appears when loss-making)
+  // ===================================================================
+  if (analysis.gap > 0) {
+    pdf.addPage(); y = margin;
+    pdf.setFontSize(18); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.red);
+    pdf.text('How Can We Bridge the Loss?', margin, y + 4); y += 8;
+    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+    const bridgeIntro = `The current FY shows a projected loss of ${money(analysis.gap)}. Below is a strategic breakdown of levers available to close this gap before end of FY.`;
+    const bridgeIntroLines = pdf.splitTextToSize(bridgeIntro, contentW);
+    bridgeIntroLines.forEach(line => { pdf.text(line, margin, y); y += 4; });
+    y += 4;
+
+    // FY boundaries for analysis
+    const bNow = new Date();
+    const bCurMonth = bNow.getMonth(); // 0-indexed
+    const bCurYear = bNow.getFullYear();
+    const bFYStart = bCurMonth >= 10 ? bCurYear : bCurYear - 1;
+    const bFYEndYM = (bFYStart + 1) * 12 + 9; // Oct end
+    const bCurYM = bCurYear * 12 + bCurMonth;
+    const bMonthsRemaining = bFYEndYM - bCurYM;
+    const bMONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const bParseMon = (m) => {
+      if (!m) return null;
+      const parts = String(m).split(' ');
+      const mi = bMONTHS.findIndex(n => parts[0]?.startsWith(n));
+      const yr = parseInt(parts[1] || parts[0], 10);
+      if (mi === -1 || isNaN(yr)) return null;
+      return { month: mi, year: yr > 100 ? yr : 2000 + yr };
+    };
+    const bYmInt = (p) => p ? p.year * 12 + p.month : 0;
+    const bInFY = (p) => p && ((p.year === bFYStart && p.month >= 10) || (p.year === bFYStart + 1 && p.month <= 9));
+
+    // -- Lever 1: CW deals billing in new FY that could be brought forward --
+    const cwBillingNewFY = boardPlan.closedWonDeals.filter(d => {
+      const p = bParseMon(d.billingStart);
+      return p && !bInFY(p) && bYmInt(p) > bFYEndYM;
+    });
+    const cwBringForwardGP = cwBillingNewFY.reduce((s, d) => s + d.profit, 0);
+
+    if (cwBillingNewFY.length > 0) {
+      heading('Lever 1: Bring Forward Closed Won Deals', `${cwBillingNewFY.length} deal(s) closed but billing after Oct ${bFYStart + 1} -- can any delivery be accelerated?`);
+      const bfRows = cwBillingNewFY.map(d => [
+        d.customer,
+        (d.description || '').length > 35 ? d.description.substring(0, 33) + '..' : (d.description || d.serviceType || ''),
+        d.dealType,
+        { text: money(d.profit), align: 'right' },
+        d.billingStart || 'TBC',
+      ]);
+      bfRows.push([{ text: 'Total Potential', bold: true }, '', '', { text: money(cwBringForwardGP), align: 'right', bold: true, color: BRAND.green }, '']);
+      y = drawTable(pdf, y, margin, contentW,
+        ['Customer', 'Description', 'Type', { text: 'GP', align: 'right' }, 'Billing Start'],
+        bfRows,
+        { headColor: BRAND.green, colWidths: [35, 50, 22, 25, 30], fontSize: 8, pageH }
+      );
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(...BRAND.muted);
+      const bfNote = `Question: Can we accelerate delivery on any of these to start billing before end of Oct ${bFYStart + 1}? Even partial billing would reduce the gap. These deals are already won -- no sales effort required, just delivery scheduling.`;
+      const bfLines = pdf.splitTextToSize(bfNote, contentW);
+      bfLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
+      pdf.setFont('helvetica', 'normal');
+      y += 4;
+    }
+
+    // -- Lever 2: Negotiation deals that could close and bill this FY --
+    const negClosingThisFY = boardPlan.negotiatingDeals.filter(d => {
+      const cp = bParseMon(d.predictedMonth || d.billingStart);
+      return cp && bInFY(cp);
+    });
+    const negBillingThisFY = negClosingThisFY.filter(d => {
+      const bp = bParseMon(d.billingStart);
+      return bp && bYmInt(bp) <= bFYEndYM;
+    });
+
+    if (negBillingThisFY.length > 0) {
+      const negBillGP = negBillingThisFY.reduce((s, d) => s + d.profit, 0);
+      heading('Lever 2: Close Negotiation Deals', `${negBillingThisFY.length} deal(s) that can close AND start billing this FY`);
+      const negRows = negBillingThisFY.map(d => [
+        d.customer,
+        (d.description || '').length > 35 ? d.description.substring(0, 33) + '..' : (d.description || d.serviceType || ''),
+        d.dealType,
+        { text: money(d.profit), align: 'right' },
+        d.predictedMonth || 'TBC',
+        d.billingStart || 'TBC',
+      ]);
+      negRows.push([{ text: 'Total', bold: true }, '', '', { text: money(negBillGP), align: 'right', bold: true, color: BRAND.amber }, '', '']);
+      y = drawTable(pdf, y, margin, contentW,
+        ['Customer', 'Description', 'Type', { text: 'GP', align: 'right' }, 'Close', 'Billing'],
+        negRows,
+        { headColor: BRAND.amber, colWidths: [30, 42, 20, 22, 24, 24], fontSize: 8, pageH }
+      );
+      y += 4;
+    }
+
+    // -- Lever 3: Short-term NR work --
+    const nrDealsInPipeline = [...boardPlan.negotiatingDeals, ...(boardPlan.quotingDeals || [])].filter(d => d.dealType !== 'Recurring');
+    const nrPipelineGP = nrDealsInPipeline.reduce((s, d) => s + d.profit, 0);
+
+    heading('Lever 3: Short-Term Non-Recurring Work', `Can we close ${money(analysis.gap)} of NR GP before end of FY?`);
+    const lever3Points = [];
+    lever3Points.push(`We need ${money(analysis.gap)} additional GP to break even this FY.`);
+    lever3Points.push(`There are ${bMonthsRemaining} months remaining (${bMONTHS[bCurMonth]} ${bCurYear} to Oct ${bFYStart + 1}).`);
+    if (nrDealsInPipeline.length > 0) {
+      lever3Points.push(`${nrDealsInPipeline.length} NR deal(s) already in pipeline (Negotiating/Quoting) worth ${money(nrPipelineGP)} GP -- can any be fast-tracked?`);
+    }
+    lever3Points.push(`Consider: consultancy engagements, engineering projects, audit work, or ad-hoc support that can be scoped, sold, and delivered within ${bMonthsRemaining} months.`);
+    lever3Points.push(`At current team capacity, what is the realistic delivery bandwidth alongside existing commitments?`);
+    lever3Points.forEach(point => bullet(point, BRAND.amber));
+    y += 2;
+
+    // -- Lever 4: What we should NOT do --
+    heading('What We Should Not Do', 'Protecting the new FY pipeline');
+    const protectPoints = [];
+    protectPoints.push(`Do NOT pull forward new FY pipeline deals at the expense of ${`FY${String(bFYStart + 1).slice(2)}/${String(bFYStart + 2).slice(2)}`} positioning. Deals already secured for the new FY represent confirmed future revenue.`);
+    if (cwBillingNewFY.length > 0) {
+      protectPoints.push(`${cwBillingNewFY.length} closed deal(s) worth ${money(cwBringForwardGP)} GP are already banked for the new FY -- killing this pipeline to plug a short-term gap would be counterproductive.`);
+    }
+    protectPoints.push(`Focus should be on incremental short-term NR wins and delivery acceleration -- not cannibalising the future.`);
+    protectPoints.forEach(point => bullet(point, BRAND.purple));
+    y += 2;
+
+    // -- New FY NR Project Revenue Impact --
+    const newFYLabel = `FY${String(bFYStart + 1).slice(2)}/${String(bFYStart + 2).slice(2)}`;
+    const bIsInNewFY = (bs) => {
+      const p = bParseMon(bs);
+      if (!p) return false;
+      return (p.year === bFYStart + 1 && p.month >= 10) || (p.year === bFYStart + 2 && p.month <= 9);
+    };
+    // CW NR deals billing in new FY
+    const cwNRNewFY = boardPlan.closedWonDeals.filter(d => d.dealType !== 'Recurring' && bIsInNewFY(d.billingStart));
+    const cwNRNewFYGP = cwNRNewFY.reduce((s, d) => s + d.profit, 0);
+    // Negotiation NR deals targeting new FY
+    const negNRNewFY = boardPlan.negotiatingDeals.filter(d => d.dealType !== 'Recurring' && (bIsInNewFY(d.billingStart) || bIsInNewFY(d.predictedMonth)));
+    const negNRNewFYGP = negNRNewFY.reduce((s, d) => s + d.profit, 0);
+    const totalNRNewFYGP = cwNRNewFYGP + negNRNewFYGP;
+    const allNRNewFYDeals = [...cwNRNewFY, ...negNRNewFY];
+    // Monthly cost run-rate
+    const bMonthlyCost = boardPlan.monthlyData[boardPlan.monthlyData.length - 1]?.totalCost || boardPlan.totalCostTotal / 12;
+    const monthsCovered = bMonthlyCost > 0 ? totalNRNewFYGP / bMonthlyCost : 0;
+
+    if (allNRNewFYDeals.length > 0) {
+      ensureSpace(40);
+      heading(`${newFYLabel} Project Revenue Already in the Bank`, `NR GP from closed + negotiation deals billing in the new FY`);
+
+      pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+      const nrIntro = `We already have ${money(cwNRNewFYGP)} of NR GP from ${cwNRNewFY.length} closed won deal(s), plus ${money(negNRNewFYGP)} from ${negNRNewFY.length} deal(s) in negotiation -- a combined ${money(totalNRNewFYGP)} of project GP expected to bill by early ${newFYLabel}. This covers approximately ${monthsCovered.toFixed(1)} months of operating costs (${money(bMonthlyCost)}/mo).`;
+      const nrIntroLines = pdf.splitTextToSize(nrIntro, contentW);
+      nrIntroLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
+      y += 3;
+
+      // Deal table
+      const nrNewFYRows = allNRNewFYDeals.map(d => [
+        d.customer,
+        (d.description || '').length > 30 ? d.description.substring(0, 28) + '..' : (d.description || d.serviceType || ''),
+        d.stage === 'Closed-Won' ? 'CW' : 'Neg',
+        { text: money(d.revenue), align: 'right' },
+        { text: money(d.profit), align: 'right', color: d.stage === 'Closed-Won' ? BRAND.green : BRAND.amber },
+        d.billingStart || d.predictedMonth || 'TBC',
+      ]);
+      nrNewFYRows.push([
+        { text: 'TOTAL NR GP', bold: true }, '', '',
+        { text: money(allNRNewFYDeals.reduce((s, d) => s + d.revenue, 0)), align: 'right', bold: true },
+        { text: money(totalNRNewFYGP), align: 'right', bold: true, color: BRAND.green },
+        '',
+      ]);
+      y = drawTable(pdf, y, margin, contentW,
+        ['Customer', 'Description', 'Stage', { text: 'Revenue', align: 'right' }, { text: 'GP', align: 'right' }, 'Billing'],
+        nrNewFYRows,
+        { headColor: BRAND.green, colWidths: [30, 45, 15, 25, 22, 25], fontSize: 8, pageH }
+      );
+      y += 3;
+
+      // New FY P&L impact narrative
+      // Recurring base carrying into new FY
+      const newFYRecBase = boardPlan.closedWonDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
+      const negRecGP = boardPlan.negotiatingDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
+      const newFYAnnualRecGP = (newFYRecBase + negRecGP) * 12;
+      const newFYAnnualCost = bMonthlyCost * 12;
+      const newFYRecGap = newFYAnnualRecGP - newFYAnnualCost;
+      const newFYWithNR = newFYRecGap + totalNRNewFYGP;
+
+      ensureSpace(40);
+      heading(`${newFYLabel} Cost vs Revenue Outlook`, `How NR project GP plugs the recurring gap`);
+
+      const outlookRows = [
+        ['Annual Recurring GP (CW + Neg)', { text: money(newFYAnnualRecGP), align: 'right', color: BRAND.green }],
+        ['Annual Costs', { text: money(newFYAnnualCost), align: 'right', color: BRAND.red }],
+        [{ text: 'Recurring Surplus / (Gap)', bold: true }, { text: money(newFYRecGap), align: 'right', bold: true, color: newFYRecGap >= 0 ? BRAND.green : BRAND.red }],
+        ['+ NR Project GP (CW + Neg)', { text: '+' + money(totalNRNewFYGP), align: 'right', color: BRAND.amber }],
+        [{ text: 'Net Position with NR', bold: true }, { text: money(newFYWithNR), align: 'right', bold: true, color: newFYWithNR >= 0 ? BRAND.green : BRAND.red }],
+      ];
+      y = drawTable(pdf, y, margin, contentW,
+        ['Metric', { text: newFYLabel, align: 'right' }],
+        outlookRows,
+        { headColor: BRAND.navy, colWidths: [100, 70], fontSize: 9, pageH }
+      );
+      y += 3;
+
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+      const outlookNote = newFYWithNR >= 0
+        ? `With ${money(totalNRNewFYGP)} of NR project revenue expected to bill by early ${newFYLabel}, the new FY moves into a net positive position of ${money(newFYWithNR)}. The majority of this work is expected to complete and bill by April ${bFYStart + 2}, providing strong early-year cash flow without needing to close additional deals.`
+        : `NR project revenue of ${money(totalNRNewFYGP)} reduces the annual gap from ${money(Math.abs(newFYRecGap))} to ${money(Math.abs(newFYWithNR))}. Additional recurring or NR wins will be needed to reach profitability in ${newFYLabel}.`;
+      const outlookLines = pdf.splitTextToSize(outlookNote, contentW);
+      outlookLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
+      y += 4;
+    }
+
+    // -- Summary: The Bridge --
+    heading('The Bridge Summary', `What needs to happen to close the ${money(analysis.gap)} gap`);
+    const bridgeSummaryParts = [];
+    let remainingGap = analysis.gap;
+    if (cwBillingNewFY.length > 0) {
+      bridgeSummaryParts.push(['Accelerate CW delivery', money(cwBringForwardGP) + ' (if all brought forward)', 'Low risk -- deals already won']);
+      remainingGap = Math.max(0, remainingGap - cwBringForwardGP);
+    }
+    if (negBillingThisFY.length > 0) {
+      const negGP = negBillingThisFY.reduce((s, d) => s + d.profit, 0);
+      bridgeSummaryParts.push(['Close negotiation deals', money(negGP) + ' monthly GP', 'Medium risk -- deals in progress']);
+      remainingGap = Math.max(0, remainingGap - negGP * bMonthsRemaining);
+    }
+    bridgeSummaryParts.push(['New short-term NR work', money(remainingGap > 0 ? remainingGap : 0) + ' needed', remainingGap > 0 ? 'Required to fully bridge' : 'May not be needed if above levers land']);
+
+    y = drawTable(pdf, y, margin, contentW,
+      ['Lever', 'Potential GP', 'Risk Level'],
+      bridgeSummaryParts.map(p => [p[0], { text: p[1], align: 'right' }, p[2]]),
+      { headColor: BRAND.red, colWidths: [50, 50, 70], fontSize: 8, pageH }
+    );
+    y += 4;
+
+    if (remainingGap > 0) {
+      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.red);
+      ensureSpace(8);
+      pdf.text(`Bottom line: We need to generate ${money(remainingGap)} in additional GP through short-term NR work over the next ${bMonthsRemaining} months.`, margin, y);
+      y += 6;
+      pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...BRAND.muted);
+      pdf.setFontSize(8);
+      const blNote = `That equates to roughly ${money(Math.ceil(remainingGap / bMonthsRemaining))}/month of additional GP. Is this achievable with current resources and delivery capacity?`;
+      const blLines = pdf.splitTextToSize(blNote, contentW);
+      blLines.forEach(line => { ensureSpace(5); pdf.text(line, margin, y); y += 4; });
+    } else {
+      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.green);
+      ensureSpace(8);
+      pdf.text(`If the above levers land, we can bridge the ${money(analysis.gap)} gap without new pipeline -- focus on execution.`, margin, y);
+      y += 6;
+    }
+  }
+
+  // ===================================================================
   // SALES TRENDS
   // ===================================================================
   pdf.addPage(); y = margin;
