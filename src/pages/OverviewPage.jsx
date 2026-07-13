@@ -773,6 +773,118 @@ export default function OverviewPage() {
                 </table>
               </div>
             )}
+
+            {/* Progressive Waterfall: When Does the Shortfall Disappear? */}
+            {(() => {
+              // Build waterfall rows: costs → then layer in GP by stage
+              const cwRecGP = newFYCombinedBaseSummary.monthlyGP;
+              const cwNRGP = summarise(newFYNewDeals).nrGP;
+              // Pipeline by stage for new FY
+              const negDeals = newFYPipeline.filter(d => d.stage === 'Negotiating');
+              const quotDeals = newFYPipeline.filter(d => d.stage === 'Quoting');
+              const qualDeals = newFYPipeline.filter(d => ['Qualified', 'Lead', 'To Be Contacted'].includes(d.stage));
+              const negS = summarise(negDeals);
+              const quotS = summarise(quotDeals);
+              const qualS = summarise(qualDeals);
+
+              let running = 0;
+              const rows = [];
+
+              // Row 1: Current costs
+              rows.push({ label: 'Current Monthly Costs', monthlyGP: 0, nrGP: 0, costDelta: monthlyCosts, runningCost: monthlyCosts, runningGP: 0, runningNR: 0 });
+              // Row 2: + New hires
+              if (newHireMonthlyCost > 0) {
+                rows.push({ label: '+ Planned New Hires', monthlyGP: 0, nrGP: 0, costDelta: newHireMonthlyCost, runningCost: newFYMonthlyCosts, runningGP: 0, runningNR: 0 });
+              }
+              const totalCost = newFYMonthlyCosts;
+              let gpRunning = 0;
+              let nrRunning = 0;
+
+              // Row 3: Closed Won recurring base
+              gpRunning += cwRecGP;
+              nrRunning += cwNRGP;
+              rows.push({ label: 'Closed Won (Recurring Base)', monthlyGP: cwRecGP, nrGP: cwNRGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: newFYRecurringBase.length + newFYNewDeals.length });
+
+              // Row 4: + Negotiation
+              if (negDeals.length > 0) {
+                gpRunning += negS.monthlyGP;
+                nrRunning += negS.nrGP;
+                rows.push({ label: '+ Negotiating', monthlyGP: negS.monthlyGP, nrGP: negS.nrGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: negDeals.length });
+              }
+              // Row 5: + Quoting
+              if (quotDeals.length > 0) {
+                gpRunning += quotS.monthlyGP;
+                nrRunning += quotS.nrGP;
+                rows.push({ label: '+ Quoting', monthlyGP: quotS.monthlyGP, nrGP: quotS.nrGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: quotDeals.length });
+              }
+              // Row 6: + Qualified / Lead
+              if (qualDeals.length > 0) {
+                gpRunning += qualS.monthlyGP;
+                nrRunning += qualS.nrGP;
+                rows.push({ label: '+ Qualified / Lead', monthlyGP: qualS.monthlyGP, nrGP: qualS.nrGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: qualDeals.length });
+              }
+
+              let crossedAt = null;
+              for (const r of rows) {
+                if (r.runningGP >= r.runningCost && r.runningGP > 0 && !crossedAt) crossedAt = r.label;
+              }
+
+              return (
+                <div className={`${card} mt-4 mb-6`}>
+                  <p className="text-white font-semibold mb-1 text-sm">When Does the Shortfall Disappear?</p>
+                  <p className="text-[#5A7A95] text-[10px] mb-3">
+                    Progressive view: monthly costs with new hires vs cumulative GP as each pipeline stage is layered in.
+                  </p>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[#5A7A95] text-xs border-b border-[#2A4A6F]">
+                        <th className="text-left py-2">Stage</th>
+                        <th className="text-right py-2">Deals</th>
+                        <th className="text-right py-2">Monthly GP</th>
+                        <th className="text-right py-2">NR GP</th>
+                        <th className="text-right py-2">Running GP</th>
+                        <th className="text-right py-2">Monthly Costs</th>
+                        <th className="text-right py-2">Surplus / Gap</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, i) => {
+                        const gap = r.runningGP - r.runningCost;
+                        const isPositive = gap >= 0 && r.runningGP > 0;
+                        const isCostRow = r.costDelta > 0 && r.monthlyGP === 0;
+                        return (
+                          <tr key={i} className={`border-b border-[#2A4A6F]/40 ${isPositive ? 'bg-[#059669]/10' : ''}`}>
+                            <td className="py-2 text-white font-medium">{r.label}</td>
+                            <td className="py-2 text-right font-mono text-[#5A7A95]">{r.deals || '\u2013'}</td>
+                            <td className="py-2 text-right font-mono">
+                              {isCostRow ? <span className="text-[#5A7A95]">\u2013</span> : <span className="text-[#059669]">{money(r.monthlyGP)}</span>}
+                            </td>
+                            <td className="py-2 text-right font-mono">
+                              {r.nrGP > 0 ? <span className="text-amber-400">{money(r.nrGP)}</span> : <span className="text-[#5A7A95]">\u2013</span>}
+                            </td>
+                            <td className="py-2 text-right font-mono text-white font-bold">{r.runningGP > 0 ? money(r.runningGP) : '\u2013'}</td>
+                            <td className="py-2 text-right font-mono text-red-400">{money(r.runningCost)}</td>
+                            <td className={`py-2 text-right font-mono font-bold ${isPositive ? 'text-[#059669]' : r.runningGP > 0 ? 'text-red-400' : 'text-[#5A7A95]'}`}>
+                              {r.runningGP > 0 ? money(gap) : '\u2013'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {crossedAt && (
+                    <p className="text-[#059669] text-xs mt-3 font-semibold">
+                      ✓ Monthly GP covers costs at: {crossedAt}
+                    </p>
+                  )}
+                  {!crossedAt && gpRunning > 0 && (
+                    <p className="text-red-400 text-xs mt-3 font-semibold">
+                      ✗ Monthly recurring GP does not cover costs even with full pipeline. NR project revenue of {money(nrRunning)} helps offset &mdash; see annual view above.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </>
         );
       })()}
