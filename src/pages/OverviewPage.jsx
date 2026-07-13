@@ -346,6 +346,472 @@ function BoardPlanDashboard({ boardPlan }) {
     : cwPeriod === 'year' ? `Calendar Year ${cwCurYear}`
     : 'All Time';
 
+  // --- NEW FY POSITION TAB ---
+  if (activeTab === 'newfy') {
+    const newFYStart = fyStartYear + 1; // Next FY starts Oct of this year+1 (or current if after Oct)
+    const newFYLabel = `Oct ${newFYStart} - Sep ${newFYStart + 1}`;
+
+    // Parse billing start into { month index, year }
+    const parseBillingStart = (bs) => {
+      if (!bs) return null;
+      const parts = String(bs).split(' ');
+      const mi = monthNames78.indexOf(parts[0]);
+      const yr = parseInt(parts[1]);
+      if (mi === -1 || isNaN(yr)) return null;
+      return { mi, yr };
+    };
+
+    // Is billing start before end of current FY (i.e. before Oct newFYStart)?
+    const isBeforeNewFY = (bs) => {
+      const p = parseBillingStart(bs);
+      if (!p) return false;
+      return (p.yr < newFYStart) || (p.yr === newFYStart && p.mi < 9);
+    };
+
+    // Is billing start in the new FY (Oct newFYStart - Sep newFYStart+1)?
+    const isInNewFY = (bs) => {
+      const p = parseBillingStart(bs);
+      if (!p) return false;
+      return (p.yr === newFYStart && p.mi >= 9) || (p.yr === newFYStart + 1 && p.mi <= 8);
+    };
+
+    // Recurring CW deals billing before new FY = monthly revenue/GP carrying forward
+    const recurringCarrying = closedWonDeals.filter(d => d.dealType === 'Recurring' && isBeforeNewFY(d.billingStart));
+    const recurringCarryingRev = recurringCarrying.reduce((s, d) => s + d.revenue, 0);
+    const recurringCarryingGP = recurringCarrying.reduce((s, d) => s + d.profit, 0);
+
+    // Recurring CW deals billing IN new FY = new recurring starting in new FY
+    const recurringNewFY = closedWonDeals.filter(d => d.dealType === 'Recurring' && isInNewFY(d.billingStart));
+    const recurringNewFYRev = recurringNewFY.reduce((s, d) => s + d.revenue, 0);
+    const recurringNewFYGP = recurringNewFY.reduce((s, d) => s + d.profit, 0);
+
+    // Non-recurring CW deals with billing in new FY = NR cash coming
+    const nrNewFY = closedWonDeals.filter(d => d.dealType !== 'Recurring' && isInNewFY(d.billingStart));
+    const nrNewFYRev = nrNewFY.reduce((s, d) => s + d.revenue, 0);
+    const nrNewFYGP = nrNewFY.reduce((s, d) => s + d.profit, 0);
+
+    // Non-recurring CW deals already closed but billing hasn't happened yet (after current FY)
+    const nrDeferredAll = closedWonDeals.filter(d => d.dealType !== 'Recurring' && !isBeforeNewFY(d.billingStart));
+    const nrDeferredRev = nrDeferredAll.reduce((s, d) => s + d.revenue, 0);
+    const nrDeferredGP = nrDeferredAll.reduce((s, d) => s + d.profit, 0);
+
+    // Also include negotiating recurring deals that would carry if closed
+    const negRecurringCarrying = negotiatingDeals.filter(d => d.dealType === 'Recurring' && isBeforeNewFY(d.billingStart));
+    const negRecurringCarryingGP = negRecurringCarrying.reduce((s, d) => s + d.profit, 0);
+    const negRecurringCarryingRev = negRecurringCarrying.reduce((s, d) => s + d.revenue, 0);
+
+    const negNRNewFY = negotiatingDeals.filter(d => d.dealType !== 'Recurring' && (isInNewFY(d.billingStart) || !isBeforeNewFY(d.billingStart)));
+    const negNRNewFYGP = negNRNewFY.reduce((s, d) => s + d.profit, 0);
+    const negNRNewFYRev = negNRNewFY.reduce((s, d) => s + d.revenue, 0);
+
+    // All negotiating deals for new FY (both rec and NR)
+    const negAllNewFY = negotiatingDeals.filter(d => !isBeforeNewFY(d.billingStart) || isInNewFY(d.billingStart));
+    const negAllNewFYGP = negotiatingDeals.reduce((s, d) => s + d.profit, 0);
+    const negAllNewFYRev = negotiatingDeals.reduce((s, d) => s + d.revenue, 0);
+
+    // Quoting, Qualified, Lead deals for new FY pipeline
+    const quotingNewFY = quotingDeals.filter(d => !isBeforeNewFY(d.billingStart) || !d.billingStart);
+    const quotingNewFYGP = quotingNewFY.reduce((s, d) => s + d.profit, 0);
+    const quotingNewFYRev = quotingNewFY.reduce((s, d) => s + d.revenue, 0);
+    const earlyNewFY = earlyStageDeals.filter(d => !isBeforeNewFY(d.billingStart) || !d.billingStart);
+    const earlyNewFYGP = earlyNewFY.reduce((s, d) => s + d.profit, 0);
+    const earlyNewFYRev = earlyNewFY.reduce((s, d) => s + d.revenue, 0);
+
+    const totalRecurringGPNewFY = recurringCarryingGP + recurringNewFYGP;
+    const totalRecurringRevNewFY = recurringCarryingRev + recurringNewFYRev;
+
+    // Year-end monthly cost (last month in data)
+    const monthlyCostYE = monthlyData[monthlyData.length - 1]?.totalCost || totalCostTotal / 12;
+    const monthlyGapCW = totalRecurringGPNewFY - monthlyCostYE;
+    const monthlyGapForecast = (totalRecurringGPNewFY + negRecurringCarryingGP) - monthlyCostYE;
+
+    return (
+      <Layout>
+        <div ref={reportRef} className="space-y-6 pb-6">
+          {/* Tab bar */}
+          <div className="flex gap-2 flex-wrap items-center no-print">
+            <button onClick={() => setActiveTab('pipeline')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Pipeline &amp; Forecast</button>
+            <button onClick={() => setActiveTab('closedwon')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Closed Won Report</button>
+            <button className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0EA5E9] text-white">New FY Position</button>
+            <button onClick={handleExportPDF} disabled={exporting} className="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-[#059669] hover:bg-[#059669]/80 text-white transition-colors disabled:opacity-50 flex items-center gap-2">
+              {exporting ? (
+                <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Exporting...</>
+              ) : (
+                <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Export PDF</>
+              )}
+            </button>
+          </div>
+
+          {/* Header */}
+          <div>
+            <h1 className="text-2xl font-bold text-white">New FY Starting Position</h1>
+            <p className="text-sm text-[#5A7A95] mt-1">Entering {newFYLabel} — confirmed recurring revenue, deferred NR billing, and cost comparison</p>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-[10px] text-[#059669] font-semibold uppercase tracking-wide mb-2">Recurring GP (Billing Started)</p>
+              <p className="text-xs text-[#A0B4C8]">Revenue</p>
+              <p className="text-lg font-bold text-white">{money(recurringCarryingRev)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
+              <p className="text-xs text-[#A0B4C8] mt-1">GP</p>
+              <p className="text-lg font-bold text-[#059669]">{money(recurringCarryingGP)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">{recurringCarrying.length} deals already billing</p>
+            </div>
+            <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-[10px] text-[#0EA5E9] font-semibold uppercase tracking-wide mb-2">Recurring GP (Starts in New FY)</p>
+              <p className="text-xs text-[#A0B4C8]">Revenue</p>
+              <p className="text-lg font-bold text-white">+{money(recurringNewFYRev)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
+              <p className="text-xs text-[#A0B4C8] mt-1">GP</p>
+              <p className="text-lg font-bold text-[#0EA5E9]">+{money(recurringNewFYGP)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">{recurringNewFY.length} deals start billing in new FY</p>
+            </div>
+            <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-[10px] text-[#f59e0b] font-semibold uppercase tracking-wide mb-2">NR Revenue (Deferred to New FY)</p>
+              <p className="text-xs text-[#A0B4C8]">Revenue</p>
+              <p className="text-lg font-bold text-white">{money(nrDeferredRev)}</p>
+              <p className="text-xs text-[#A0B4C8] mt-1">GP</p>
+              <p className="text-lg font-bold text-[#f59e0b]">{money(nrDeferredGP)}</p>
+              <p className="text-[10px] text-[#5A7A95] mt-1">{nrDeferredAll.length} CW deals billing in new FY</p>
+            </div>
+            <div className="rounded-xl border-2 border-[#ef4444] bg-[#ef4444]/5 p-4">
+              <p className="text-[10px] text-[#ef4444] font-semibold uppercase tracking-wide mb-2">Monthly Costs</p>
+              <p className="text-xs text-[#A0B4C8]">Year-End Run Rate</p>
+              <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCostYE)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
+              <p className="text-xs text-[#A0B4C8] mt-1">Annual</p>
+              <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCostYE * 12)}</p>
+            </div>
+          </div>
+
+          {/* Monthly GP vs Costs comparison */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs font-bold text-white mb-3">CW Only: Monthly Recurring GP vs Costs</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div>
+                  <p className="text-[10px] text-[#A0B4C8]">Monthly Recurring GP</p>
+                  <p className="text-lg font-bold text-[#059669]">{money(totalRecurringGPNewFY)}</p>
+                </div>
+                <span className="text-[#5A7A95] text-lg">vs</span>
+                <div>
+                  <p className="text-[10px] text-[#A0B4C8]">Monthly Costs</p>
+                  <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCostYE)}</p>
+                </div>
+                <span className="text-[#5A7A95] text-lg">=</span>
+                <div>
+                  <p className="text-[10px] text-[#A0B4C8]">Monthly Gap</p>
+                  <p className={`text-lg font-bold ${monthlyGapCW >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{monthlyGapCW >= 0 ? '+' : ''}{money(monthlyGapCW)}</p>
+                </div>
+              </div>
+              {monthlyGapCW < 0 && <p className="text-xs text-[#f59e0b] mt-2">⚠ Need {money(Math.abs(monthlyGapCW))}/mo more recurring GP to break even</p>}
+              {monthlyGapCW >= 0 && <p className="text-xs text-[#059669] mt-2">✓ Confirmed deals cover monthly costs</p>}
+            </div>
+            <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <p className="text-xs font-bold text-white mb-3">Forecast (CW + Neg): Monthly GP vs Costs</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div>
+                  <p className="text-[10px] text-[#A0B4C8]">Monthly Recurring GP</p>
+                  <p className="text-lg font-bold text-[#059669]">{money(totalRecurringGPNewFY + negRecurringCarryingGP)}</p>
+                </div>
+                <span className="text-[#5A7A95] text-lg">vs</span>
+                <div>
+                  <p className="text-[10px] text-[#A0B4C8]">Monthly Costs</p>
+                  <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCostYE)}</p>
+                </div>
+                <span className="text-[#5A7A95] text-lg">=</span>
+                <div>
+                  <p className="text-[10px] text-[#A0B4C8]">Monthly Gap</p>
+                  <p className={`text-lg font-bold ${monthlyGapForecast >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'}`}>{monthlyGapForecast >= 0 ? '+' : ''}{money(monthlyGapForecast)}</p>
+                </div>
+              </div>
+              {monthlyGapForecast < 0 && <p className="text-xs text-[#f59e0b] mt-2">⚠ Even with negotiating deals, still {money(Math.abs(monthlyGapForecast))}/mo short</p>}
+              {monthlyGapForecast >= 0 && <p className="text-xs text-[#059669] mt-2">✓ Forecast covers monthly costs with {money(monthlyGapForecast)}/mo surplus</p>}
+            </div>
+          </div>
+
+          {/* Recurring deals carrying into new FY */}
+          <section className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+            <h2 className="text-sm font-bold text-white mb-3">Recurring Deals — Billing Started (Carrying into New FY)</h2>
+            <p className="text-xs text-[#5A7A95] mb-3">These deals are already billing and will continue as monthly recurring revenue in the new FY.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                  <th className="text-left py-2">Customer</th>
+                  <th className="text-left py-2">Description</th>
+                  <th className="text-left py-2">Service</th>
+                  <th className="text-left py-2">Billing Start</th>
+                  <th className="text-right py-2">Revenue/mo</th>
+                  <th className="text-right py-2">GP/mo</th>
+                </tr></thead>
+                <tbody>
+                  {recurringCarrying.map(d => (
+                    <tr key={d.id} className="border-b border-[#2A4A6F]/50 hover:bg-[#1A334F]/50">
+                      <td className="py-2 text-white">{d.customer}</td>
+                      <td className="py-2 text-[#A0B4C8]">{d.description?.substring(0, 40)}</td>
+                      <td className="py-2 text-[#A0B4C8]">{d.serviceType}</td>
+                      <td className="py-2 text-[#A0B4C8]">{d.billingStart}</td>
+                      <td className="py-2 text-right text-white">{money(d.revenue)}</td>
+                      <td className="py-2 text-right text-[#059669]">{money(d.profit)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-[#2A4A6F] font-bold">
+                    <td className="py-2 text-white" colSpan={4}>Total Monthly Recurring</td>
+                    <td className="py-2 text-right text-white">{money(recurringCarryingRev)}/mo</td>
+                    <td className="py-2 text-right text-[#059669]">{money(recurringCarryingGP)}/mo</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Recurring deals starting in new FY */}
+          {recurringNewFY.length > 0 && (
+            <section className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <h2 className="text-sm font-bold text-white mb-3">Recurring Deals — Billing Starts in New FY</h2>
+              <p className="text-xs text-[#5A7A95] mb-3">Closed-Won recurring deals where billing commences in the new FY.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                    <th className="text-left py-2">Customer</th>
+                    <th className="text-left py-2">Description</th>
+                    <th className="text-left py-2">Service</th>
+                    <th className="text-left py-2">Billing Start</th>
+                    <th className="text-right py-2">Revenue/mo</th>
+                    <th className="text-right py-2">GP/mo</th>
+                  </tr></thead>
+                  <tbody>
+                    {recurringNewFY.map(d => (
+                      <tr key={d.id} className="border-b border-[#2A4A6F]/50 hover:bg-[#1A334F]/50">
+                        <td className="py-2 text-white">{d.customer}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.description?.substring(0, 40)}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.serviceType}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.billingStart}</td>
+                        <td className="py-2 text-right text-white">{money(d.revenue)}</td>
+                        <td className="py-2 text-right text-[#059669]">{money(d.profit)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-[#2A4A6F] font-bold">
+                      <td className="py-2 text-white" colSpan={4}>Total New Recurring</td>
+                      <td className="py-2 text-right text-white">{money(recurringNewFYRev)}/mo</td>
+                      <td className="py-2 text-right text-[#059669]">{money(recurringNewFYGP)}/mo</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* NR deals deferred to new FY */}
+          {nrDeferredAll.length > 0 && (
+            <section className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+              <h2 className="text-sm font-bold text-white mb-3">Non-Recurring Deals — Billing in New FY</h2>
+              <p className="text-xs text-[#5A7A95] mb-3">Closed-Won non-recurring deals where billing takes place in the new FY (cash flow / project revenue).</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                    <th className="text-left py-2">Customer</th>
+                    <th className="text-left py-2">Description</th>
+                    <th className="text-left py-2">Service</th>
+                    <th className="text-left py-2">Billing Start</th>
+                    <th className="text-right py-2">Revenue</th>
+                    <th className="text-right py-2">GP</th>
+                  </tr></thead>
+                  <tbody>
+                    {nrDeferredAll.map(d => (
+                      <tr key={d.id} className="border-b border-[#2A4A6F]/50 hover:bg-[#1A334F]/50">
+                        <td className="py-2 text-white">{d.customer}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.description?.substring(0, 40)}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.serviceType}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.billingStart}</td>
+                        <td className="py-2 text-right text-white">{money(d.revenue)}</td>
+                        <td className="py-2 text-right text-[#f59e0b]">{money(d.profit)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-[#2A4A6F] font-bold">
+                      <td className="py-2 text-white" colSpan={4}>Total NR in New FY</td>
+                      <td className="py-2 text-right text-white">{money(nrDeferredRev)}</td>
+                      <td className="py-2 text-right text-[#f59e0b]">{money(nrDeferredGP)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* Negotiating deals that would add to new FY */}
+          {negRecurringCarrying.length > 0 && (
+            <section className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-4">
+              <h2 className="text-sm font-bold text-[#f59e0b] mb-3">Pipeline: Negotiating Recurring (Would Carry into New FY)</h2>
+              <p className="text-xs text-[#5A7A95] mb-3">If these deals close and billing starts before Oct {newFYStart}, they add to the new FY monthly position.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                    <th className="text-left py-2">Customer</th>
+                    <th className="text-left py-2">Description</th>
+                    <th className="text-left py-2">Service</th>
+                    <th className="text-left py-2">Billing Start</th>
+                    <th className="text-right py-2">Revenue/mo</th>
+                    <th className="text-right py-2">GP/mo</th>
+                  </tr></thead>
+                  <tbody>
+                    {negRecurringCarrying.map(d => (
+                      <tr key={d.id} className="border-b border-[#2A4A6F]/50 hover:bg-[#1A334F]/50">
+                        <td className="py-2 text-white">{d.customer}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.description?.substring(0, 40)}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.serviceType}</td>
+                        <td className="py-2 text-[#A0B4C8]">{d.billingStart}</td>
+                        <td className="py-2 text-right text-white">{money(d.revenue)}</td>
+                        <td className="py-2 text-right text-[#f59e0b]">{money(d.profit)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-[#2A4A6F] font-bold">
+                      <td className="py-2 text-white" colSpan={4}>Total Pipeline Recurring</td>
+                      <td className="py-2 text-right text-white">{money(negRecurringCarryingRev)}/mo</td>
+                      <td className="py-2 text-right text-[#f59e0b]">{money(negRecurringCarryingGP)}/mo</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* Full Pipeline for New FY */}
+          <section className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+           <h2 className="text-sm font-bold text-white mb-3">Pipeline Deals for New FY</h2>
+           <p className="text-xs text-[#5A7A95] mb-3">All deals in pipeline (Negotiating, Quoting, Qualified, Lead) with billing expected in the new FY or beyond.</p>
+
+           {/* Pipeline summary cards */}
+           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-4">
+             <div className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-3">
+               <p className="text-[10px] text-[#f59e0b] font-semibold uppercase">Negotiating</p>
+               <p className="text-sm font-bold text-white">{negotiatingDeals.length} deals</p>
+               <p className="text-xs text-[#A0B4C8]">Rev: {money(negAllNewFYRev)} | GP: {money(negAllNewFYGP)}</p>
+             </div>
+             <div className="rounded-lg border border-[#8b5cf6]/30 bg-[#8b5cf6]/5 p-3">
+               <p className="text-[10px] text-[#8b5cf6] font-semibold uppercase">Quoting</p>
+               <p className="text-sm font-bold text-white">{quotingNewFY.length} deals</p>
+               <p className="text-xs text-[#A0B4C8]">Rev: {money(quotingNewFYRev)} | GP: {money(quotingNewFYGP)}</p>
+             </div>
+             <div className="rounded-lg border border-[#6366f1]/30 bg-[#6366f1]/5 p-3">
+               <p className="text-[10px] text-[#6366f1] font-semibold uppercase">Qualified / Lead</p>
+               <p className="text-sm font-bold text-white">{earlyNewFY.length} deals</p>
+               <p className="text-xs text-[#A0B4C8]">Rev: {money(earlyNewFYRev)} | GP: {money(earlyNewFYGP)}</p>
+             </div>
+             <div className="rounded-lg border border-[#2A4A6F] bg-[#0D2338] p-3">
+               <p className="text-[10px] text-[#A0B4C8] font-semibold uppercase">Total Pipeline</p>
+               <p className="text-sm font-bold text-white">{negotiatingDeals.length + quotingNewFY.length + earlyNewFY.length} deals</p>
+               <p className="text-xs text-[#A0B4C8]">GP: {money(negAllNewFYGP + quotingNewFYGP + earlyNewFYGP)}</p>
+             </div>
+           </div>
+
+           {/* Negotiating table */}
+           {negotiatingDeals.length > 0 && (<>
+             <h3 className="text-xs font-bold text-[#f59e0b] mt-4 mb-2">Negotiating ({negotiatingDeals.length})</h3>
+             <div className="overflow-x-auto mb-4">
+               <table className="w-full text-xs">
+                 <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                   <th className="text-left py-1">Customer</th>
+                   <th className="text-left py-1">Description</th>
+                   <th className="text-left py-1">Type</th>
+                   <th className="text-left py-1">Billing Start</th>
+                   <th className="text-right py-1">Revenue</th>
+                   <th className="text-right py-1">GP</th>
+                 </tr></thead>
+                 <tbody>
+                   {negotiatingDeals.map(d => (
+                     <tr key={d.id} className="border-b border-[#2A4A6F]/30 hover:bg-[#1A334F]/50">
+                       <td className="py-1 text-white">{d.customer}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.description?.substring(0, 35)}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.dealType}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.billingStart}</td>
+                       <td className="py-1 text-right text-white">{money(d.revenue)}</td>
+                       <td className="py-1 text-right text-[#f59e0b]">{money(d.profit)}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+             </div>
+           </>)}
+
+           {/* Quoting table */}
+           {quotingNewFY.length > 0 && (<>
+             <h3 className="text-xs font-bold text-[#8b5cf6] mt-4 mb-2">Quoting ({quotingNewFY.length})</h3>
+             <div className="overflow-x-auto mb-4">
+               <table className="w-full text-xs">
+                 <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                   <th className="text-left py-1">Customer</th>
+                   <th className="text-left py-1">Description</th>
+                   <th className="text-left py-1">Type</th>
+                   <th className="text-left py-1">Billing Start</th>
+                   <th className="text-right py-1">Revenue</th>
+                   <th className="text-right py-1">GP</th>
+                 </tr></thead>
+                 <tbody>
+                   {quotingNewFY.map(d => (
+                     <tr key={d.id} className="border-b border-[#2A4A6F]/30 hover:bg-[#1A334F]/50">
+                       <td className="py-1 text-white">{d.customer}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.description?.substring(0, 35)}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.dealType}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.billingStart}</td>
+                       <td className="py-1 text-right text-white">{money(d.revenue)}</td>
+                       <td className="py-1 text-right text-[#8b5cf6]">{money(d.profit)}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+             </div>
+           </>)}
+
+           {/* Early stage (Qualified / Lead) table */}
+           {earlyNewFY.length > 0 && (<>
+             <h3 className="text-xs font-bold text-[#6366f1] mt-4 mb-2">Qualified / Lead ({earlyNewFY.length})</h3>
+             <div className="overflow-x-auto">
+               <table className="w-full text-xs">
+                 <thead><tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                   <th className="text-left py-1">Customer</th>
+                   <th className="text-left py-1">Description</th>
+                   <th className="text-left py-1">Type</th>
+                   <th className="text-left py-1">Stage</th>
+                   <th className="text-right py-1">Revenue</th>
+                   <th className="text-right py-1">GP</th>
+                 </tr></thead>
+                 <tbody>
+                   {earlyNewFY.map(d => (
+                     <tr key={d.id} className="border-b border-[#2A4A6F]/30 hover:bg-[#1A334F]/50">
+                       <td className="py-1 text-white">{d.customer}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.description?.substring(0, 35)}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.dealType}</td>
+                       <td className="py-1 text-[#A0B4C8]">{d.stage}</td>
+                       <td className="py-1 text-right text-white">{money(d.revenue)}</td>
+                       <td className="py-1 text-right text-[#6366f1]">{money(d.profit)}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+             </div>
+           </>)}
+          </section>
+
+          {/* Summary narrative */}
+          <div className="rounded-xl border border-[#2A4A6F] bg-[#0D2338] p-4">
+            <p className="text-xs font-bold text-white mb-2">What this means:</p>
+            <p className="text-xs text-[#A0B4C8] leading-relaxed">
+              Entering the new FY ({newFYLabel}), we have <strong className="text-[#059669]">{money(recurringCarryingGP)}/mo</strong> confirmed recurring GP from {recurringCarrying.length} deals already billing.
+              {recurringNewFY.length > 0 && <> Plus <strong className="text-[#0EA5E9]">{money(recurringNewFYGP)}/mo</strong> from {recurringNewFY.length} deals starting billing in the new FY.</>}
+              {' '}Against <strong className="text-[#ef4444]">{money(monthlyCostYE)}/mo</strong> costs, that{' '}
+              {monthlyGapCW >= 0
+                ? <span>gives a <strong className="text-[#059669]">{money(monthlyGapCW)}/mo surplus</strong>.</span>
+                : <span>leaves a <strong className="text-[#ef4444]">{money(Math.abs(monthlyGapCW))}/mo gap</strong> to bridge.</span>
+              }
+              {nrDeferredAll.length > 0 && <> Additionally, <strong className="text-[#f59e0b]">{money(nrDeferredGP)}</strong> in NR GP from {nrDeferredAll.length} closed deals will bill in the new FY (project cash flow).</>}
+              {negRecurringCarrying.length > 0 && <> If negotiating deals close, adds <strong className="text-[#f59e0b]">{money(negRecurringCarryingGP)}/mo</strong> recurring GP.</>}
+            </p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   if (activeTab === 'closedwon') {
     const filteredCW = closedWonDeals.filter(cwPeriodFilter);
     const fCwRec = filteredCW.filter(d => d.dealType === 'Recurring');
@@ -376,6 +842,7 @@ function BoardPlanDashboard({ boardPlan }) {
           <div className="flex gap-2 flex-wrap items-center no-print">
             <button onClick={() => setActiveTab('pipeline')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Pipeline &amp; Forecast</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0EA5E9] text-white">Closed Won Report</button>
+            <button onClick={() => setActiveTab('newfy')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">New FY Position</button>
             <button onClick={handleExportPDF} disabled={exporting} className="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-[#059669] hover:bg-[#059669]/80 text-white transition-colors disabled:opacity-50 flex items-center gap-2">
               {exporting ? (
                 <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Exporting...</>
@@ -802,6 +1269,7 @@ function BoardPlanDashboard({ boardPlan }) {
         <div className="flex gap-2 flex-wrap items-center">
           <button className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0EA5E9] text-white">Pipeline &amp; Forecast</button>
           <button onClick={() => setActiveTab('closedwon')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">Closed Won Report</button>
+          <button onClick={() => setActiveTab('newfy')} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1A334F] border border-[#2A4A6F] text-[#5A7A95] hover:text-white transition-colors">New FY Position</button>
           <button onClick={handleExportPDF} disabled={exporting} className="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-[#059669] hover:bg-[#059669]/80 text-white transition-colors disabled:opacity-50 flex items-center gap-2">
             {exporting ? (
               <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Exporting...</>
