@@ -315,6 +315,22 @@ export default function OverviewPage() {
   const negBillThisFY = negCloseThisFY.filter(d => inFY(d._bill, fy.start));
   const negBillNewFY = negCloseThisFY.filter(d => inFY(d._bill, fy.newStart));
 
+  /* ─── End of FY combined (CW + Negotiation) ─── */
+  // Negotiation deals that would be billing by end of FY (if closed)
+  const negBillingByEndFY = negCloseThisFY.filter(d => d._bill && ymInt(d._bill) <= fyEndYM);
+  const endFYWithNeg = [...endFYAll, ...negBillingByEndFY];
+  const endFYWithNegSummary = summarise(endFYWithNeg);
+
+  /* ─── New FY combined (CW + Neg already billing) ─── */
+  // All recurring deals (CW + Neg) billing by end of current FY carry forward
+  const negRecurringCarry = negCloseThisFY.filter(d => d.dealType === 'Recurring' && d._bill && ymInt(d._bill) <= fyEndYM);
+  const newFYCombinedBase = [...newFYRecurringBase, ...negRecurringCarry];
+  const newFYCombinedBaseSummary = summarise(newFYCombinedBase);
+  // All deals (CW + Neg) starting billing in new FY
+  const negBillingInNewFY = negCloseThisFY.filter(d => d._bill && inFY(d._bill, fy.newStart));
+  const newFYAllNewDeals = [...newFYNewDeals, ...negBillingInNewFY];
+  const newFYAllNewSummary = summarise(newFYAllNewDeals);
+
   /* ─── 6. New FY Pipeline ─── */
   const pipelineStages = ['Negotiating', 'Quoting', 'Qualified', 'Lead', 'To Be Contacted'];
   const newFYPipeline = allDeals
@@ -416,16 +432,32 @@ export default function OverviewPage() {
       )}
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 3: END OF FY POSITION
+          SECTION 3: NEGOTIATION - BILLING THIS FY
+         ════════════════════════════════════════════════════════════ */}
+      {negBillThisFY.length > 0 && (
+        <>
+          <SectionHeader
+            title="Negotiation \u2013 Billing This FY"
+            subtitle={`${negBillThisFY.length} deal(s) in negotiation expected to close and start billing before end of ${fy.label}`}
+            accent="#06b6d4"
+          />
+          <KPICards summary={summarise(negBillThisFY)} accent="#06b6d4" />
+          <DealTable deals={negBillThisFY} />
+        </>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════
+          SECTION 4: END OF FY POSITION
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title={`End of FY Position \u2013 ${fy.endMonth}`}
         subtitle="Projected position at the end of the current financial year"
         accent="#8b5cf6"
       />
-      <KPICards summary={endFYSummary} accent="#8b5cf6" />
+
+      <SubHeader>Closed Won Only</SubHeader>
       <InsightCard accent="#8b5cf6">
-        <p className="text-white font-semibold mb-2">Projected End of {fy.label}</p>
+        <p className="text-white font-semibold mb-2">End of {fy.label} (Closed Won)</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
@@ -444,6 +476,31 @@ export default function OverviewPage() {
           <div>
             <p className="text-[#5A7A95] text-xs">Total NR GP (This FY)</p>
             <p className="text-white font-bold">{money(endFYSummary.nrGP)}</p>
+          </div>
+        </div>
+      </InsightCard>
+
+      <SubHeader>Closed Won + Negotiation (If All Close)</SubHeader>
+      <InsightCard accent="#06b6d4">
+        <p className="text-white font-semibold mb-2">End of {fy.label} (Closed Won + Negotiation)</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
+            <p className="text-[#06b6d4] font-bold">{money(endFYWithNegSummary.monthlyGP)}</p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Costs</p>
+            <p className="text-white font-bold">{money(monthlyCosts)}</p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Surplus / Gap</p>
+            <p className={`font-bold ${endFYWithNegSummary.monthlyGP >= monthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+              {money(endFYWithNegSummary.monthlyGP - monthlyCosts)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Total NR GP (This FY)</p>
+            <p className="text-[#06b6d4] font-bold">{money(endFYWithNegSummary.nrGP)}</p>
           </div>
         </div>
       </InsightCard>
@@ -494,7 +551,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 4: NEW FY STARTING POSITION
+          SECTION 5: NEW FY STARTING POSITION
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title={`New FY Starting Position \u2013 ${fy.newStartMonth}`}
@@ -503,61 +560,64 @@ export default function OverviewPage() {
       />
 
       <InsightCard accent="#f59e0b">
-        <p className="text-white font-semibold mb-2">Entering {fy.newLabel} with:</p>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+        <p className="text-white font-semibold mb-2">Entering {fy.newLabel} \u2013 Closed Won + Negotiation (All Billing Started)</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
-            <p className="text-[#5A7A95] text-xs">Monthly Recurring Revenue (Carrying Forward)</p>
-            <p className="text-[#f59e0b] font-bold text-lg">{money(newFYBaseSummary.monthlyRev)}</p>
-            <p className="text-[#5A7A95] text-[10px]">{newFYBaseSummary.recCount} recurring deal(s)</p>
+            <p className="text-[#5A7A95] text-xs">Monthly Recurring Revenue</p>
+            <p className="text-[#f59e0b] font-bold text-lg">{money(newFYCombinedBaseSummary.monthlyRev)}</p>
+            <p className="text-[#5A7A95] text-[10px]">{newFYCombinedBaseSummary.recCount} recurring deal(s)</p>
           </div>
           <div>
-            <p className="text-[#5A7A95] text-xs">Monthly Recurring GP (Carrying Forward)</p>
-            <p className="text-[#f59e0b] font-bold text-lg">{money(newFYBaseSummary.monthlyGP)}</p>
+            <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
+            <p className="text-[#f59e0b] font-bold text-lg">{money(newFYCombinedBaseSummary.monthlyGP)}</p>
           </div>
           <div>
-            <p className="text-[#5A7A95] text-xs">New Deals Starting in {fy.newLabel}</p>
-            <p className="text-[#f59e0b] font-bold text-lg">{newFYNewDeals.length} deal(s)</p>
-            <p className="text-[#5A7A95] text-[10px]">
-              +{money(newFYNewSummary.monthlyRev)} monthly rev &middot; +{money(newFYNewSummary.nrRev)} NR rev
+            <p className="text-[#5A7A95] text-xs">Monthly Costs</p>
+            <p className="text-white font-bold text-lg">{money(monthlyCosts)}</p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Surplus / Gap</p>
+            <p className={`font-bold text-lg ${newFYCombinedBaseSummary.monthlyGP >= monthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+              {money(newFYCombinedBaseSummary.monthlyGP - monthlyCosts)}
             </p>
           </div>
         </div>
       </InsightCard>
 
+      {newFYAllNewDeals.length > 0 && (
+        <>
+          <SubHeader>Deals Starting Billing in New FY ({newFYAllNewDeals.length}) \u2013 Closed Won + Negotiation</SubHeader>
+          <KPICards summary={newFYAllNewSummary} accent="#f59e0b" />
+          <DealTable deals={newFYAllNewDeals} />
+        </>
+      )}
+
       {newFYNewDeals.length > 0 && (
-        <>
-          <SubHeader>Closed Won Deals Starting in New FY ({newFYNewDeals.length})</SubHeader>
-          <KPICards summary={newFYNewSummary} accent="#f59e0b" />
+        <InsightCard accent="#059669">
+          <p className="text-white font-semibold mb-1">Already Secured for New FY (Closed Won)</p>
+          <p className="text-[#5A7A95] text-xs mb-3">
+            These deals are already closed won this FY with billing starting in {fy.newLabel} &mdash; cash coming in without needing to close new deals.
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
+            <div>
+              <p className="text-[#5A7A95] text-xs">Monthly Recurring Revenue</p>
+              <p className="text-[#059669] font-bold">{money(newFYNewSummary.monthlyRev)}</p>
+            </div>
+            <div>
+              <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
+              <p className="text-[#059669] font-bold">{money(newFYNewSummary.monthlyGP)}</p>
+            </div>
+            <div>
+              <p className="text-[#5A7A95] text-xs">NR Revenue</p>
+              <p className="text-[#059669] font-bold">{money(newFYNewSummary.nrRev)}</p>
+            </div>
+            <div>
+              <p className="text-[#5A7A95] text-xs">NR GP</p>
+              <p className="text-[#059669] font-bold">{money(newFYNewSummary.nrGP)}</p>
+            </div>
+          </div>
           <DealTable deals={newFYNewDeals} />
-        </>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════
-          SECTION 5: SALES FORECAST - NEGOTIATION
-         ════════════════════════════════════════════════════════════ */}
-      <SectionHeader
-        title="Sales Forecast \u2013 Negotiation"
-        subtitle={`${negCloseThisFY.length} deal(s) in negotiation expected to close this FY`}
-        accent="#06b6d4"
-      />
-      <KPICards summary={summarise(negCloseThisFY)} accent="#06b6d4" />
-
-      {negBillThisFY.length > 0 && (
-        <>
-          <SubHeader>Billing This FY ({negBillThisFY.length} deals)</SubHeader>
-          <DealTable deals={negBillThisFY} />
-        </>
-      )}
-
-      {negBillNewFY.length > 0 && (
-        <>
-          <SubHeader>Billing New FY ({negBillNewFY.length} deals)</SubHeader>
-          <DealTable deals={negBillNewFY} />
-        </>
-      )}
-
-      {negCloseThisFY.length === 0 && (
-        <p className="text-[#5A7A95] text-sm italic mb-6">No negotiation deals expected to close this FY.</p>
+        </InsightCard>
       )}
 
       {/* ════════════════════════════════════════════════════════════
