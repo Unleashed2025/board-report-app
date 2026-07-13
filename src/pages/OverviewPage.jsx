@@ -101,6 +101,7 @@ function DealTable({ deals, showStage = false }) {
             {showStage && <th className="text-left py-2 pr-3">Stage</th>}
             <th className="text-left py-2 pr-3">Type</th>
             <th className="text-left py-2 pr-3">Service</th>
+            <th className="text-left py-2 pr-3">Description</th>
             <th className="text-left py-2 pr-3">Close Month</th>
             <th className="text-left py-2 pr-3">Billing Start</th>
             <th className="text-right py-2 pr-3">Revenue</th>
@@ -123,6 +124,7 @@ function DealTable({ deals, showStage = false }) {
                 </span>
               </td>
               <td className="py-2 pr-3 text-[#5A7A95]">{d.serviceType}</td>
+              <td className="py-2 pr-3 text-[#5A7A95] text-xs max-w-[200px] truncate" title={d.description}>{d.description || '\u2013'}</td>
               <td className="py-2 pr-3">{monthName(parseMonth(d.predictedMonth))}</td>
               <td className="py-2 pr-3">{monthName(parseMonth(d.billingStart))}</td>
               <td className="py-2 pr-3 text-right font-mono">{money(d.revenue)}</td>
@@ -132,7 +134,7 @@ function DealTable({ deals, showStage = false }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-[#2A4A6F] text-white font-semibold">
-            <td colSpan={showStage ? 7 : 6} className="py-2 pr-3 text-right">Total</td>
+            <td colSpan={showStage ? 8 : 7} className="py-2 pr-3 text-right">Total</td>
             <td className="py-2 pr-3 text-right font-mono">{money(deals.reduce((s, d) => s + d.revenue, 0))}</td>
             <td className="py-2 text-right font-mono">{money(deals.reduce((s, d) => s + d.profit, 0))}</td>
           </tr>
