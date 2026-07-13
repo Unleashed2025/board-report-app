@@ -67,10 +67,10 @@ export function parseBoardPlan(workbook) {
     return null;
   }
 
-  // Row 3 has month headers (Excel serial dates in cols 1-14, col 15 = "Total")
+  // Row 3 has month headers (Excel serial dates)
   const monthRow = rows[3] || [];
   const months = [];
-  for (let i = 1; i <= 14; i++) {
+  for (let i = 1; i <= 30; i++) {
     const val = monthRow[i];
     if (typeof val === 'number' && val > 40000) {
       months.push({ index: i, serial: val, label: serialToMonthLabel(val) });
@@ -81,7 +81,12 @@ export function parseBoardPlan(workbook) {
 
   const toNum = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : 0;
   const getRow = (rowIdx) => months.map(m => toNum((rows[rowIdx] || [])[m.index]));
-  const getTotal = (rowIdx) => toNum((rows[rowIdx] || [])[months.length + 1]);
+  const getTotal = (rowIdx) => {
+    // Try explicit total column first, otherwise sum all months
+    const explicitTotal = toNum((rows[rowIdx] || [])[months[months.length - 1].index + 1]);
+    if (explicitTotal !== 0) return explicitTotal;
+    return getRow(rowIdx).reduce((s, v) => s + v, 0);
+  };
 
   // Parse GP data (rows 5-14)
   const newRecurringGP = getRow(5);
@@ -95,24 +100,48 @@ export function parseBoardPlan(workbook) {
   const totalNonRecurringGP = getRow(13);
   const totalGP = getRow(14);
 
-  // Parse costs (rows 17-29)
-  const wages = getRow(17);
-  const ni = getRow(23);
-  const pensions = getRow(24);
-  const car = getRow(25);
-  const phones = getRow(26);
-  const insurance = getRow(27);
-  const marketing = getRow(28);
-  const totalCost = getRow(29);
+  // Parse costs (rows 17-33) - find by label to handle dynamic row layout
+  const findRow = (label) => {
+    for (let r = 16; r <= 45; r++) {
+      const cell = String((rows[r] || [])[0] || '').trim().toLowerCase();
+      if (cell === label.toLowerCase()) return r;
+    }
+    return -1;
+  };
+  const wagesRow = findRow('Wages (gross)');
+  const niRow = findRow('NI');
+  const pensionsRow = findRow('Pensions');
+  const carRow = findRow('Car');
+  const phonesRow = findRow('Phones');
+  const insuranceRow = findRow('Companies Insurance');
+  const marketingRow = findRow('Marketing / SoPro');
+  const totalCostRow = findRow('Total Cost');
+  const grossProfitRow = findRow('Gross Profit');
+  const netProfitRow = findRow('Net Profit');
+  const ebitdaBeforeMDFRow = findRow('EBITDA before MDF');
+  const ebitdaAfterMDFRow = findRow('EBITDA after MDF');
+  const cumulativeEBITDARow = findRow('Cumulative EBITDA after MDF');
+  const mdfRow = findRow('Offset MDF');
 
-  // Parse individual employee costs (rows 18-22, between Wages and NI)
-  // Then apportion NI, pensions, car proportionally by wage share for true cost
-  const totalWagesAnnual = toNum((rows[17] || [])[months.length + 1]);
-  const totalNIAnnual = toNum((rows[23] || [])[months.length + 1]);
-  const totalPensionsAnnual = toNum((rows[24] || [])[months.length + 1]);
+  const wages = wagesRow >= 0 ? getRow(wagesRow) : getRow(17);
+  const ni = niRow >= 0 ? getRow(niRow) : getRow(23);
+  const pensions = pensionsRow >= 0 ? getRow(pensionsRow) : getRow(24);
+  const car = carRow >= 0 ? getRow(carRow) : getRow(25);
+  const phones = phonesRow >= 0 ? getRow(phonesRow) : getRow(26);
+  const insurance = insuranceRow >= 0 ? getRow(insuranceRow) : getRow(27);
+  const marketing = marketingRow >= 0 ? getRow(marketingRow) : getRow(28);
+  const totalCost = totalCostRow >= 0 ? getRow(totalCostRow) : getRow(29);
+
+  // Parse individual employee costs (rows between Wages and NI)
+  const empStartRow = wagesRow >= 0 ? wagesRow + 1 : 18;
+  const empEndRow = niRow >= 0 ? niRow : 23;
+
+  const totalWagesAnnual = toNum((rows[wagesRow >= 0 ? wagesRow : 17] || [])[months.length + 1]);
+  const totalNIAnnual = toNum((rows[niRow >= 0 ? niRow : 23] || [])[months.length + 1]);
+  const totalPensionsAnnual = toNum((rows[pensionsRow >= 0 ? pensionsRow : 24] || [])[months.length + 1]);
 
   const employeeCosts = [];
-  for (let r = 18; r < 23; r++) {
+  for (let r = empStartRow; r < empEndRow; r++) {
     const name = String((rows[r] || [])[0] || '').trim();
     if (!name) continue;
     const grossWage = toNum((rows[r] || [])[months.length + 1]);
@@ -125,19 +154,19 @@ export function parseBoardPlan(workbook) {
     }
   }
 
-  // Parse outputs (rows 35-40)
-  const grossProfit = getRow(35);
-  const netProfit = getRow(37);
-  const ebitdaBeforeMDF = getRow(38);
-  const ebitdaAfterMDF = getRow(39);
-  const cumulativeEBITDA = getRow(40);
+  // Parse outputs
+  const grossProfit = grossProfitRow >= 0 ? getRow(grossProfitRow) : getRow(35);
+  const netProfit = netProfitRow >= 0 ? getRow(netProfitRow) : getRow(37);
+  const ebitdaBeforeMDF = ebitdaBeforeMDFRow >= 0 ? getRow(ebitdaBeforeMDFRow) : getRow(38);
+  const ebitdaAfterMDF = ebitdaAfterMDFRow >= 0 ? getRow(ebitdaAfterMDFRow) : getRow(39);
+  const cumulativeEBITDA = cumulativeEBITDARow >= 0 ? getRow(cumulativeEBITDARow) : getRow(40);
 
-  // MDF offset (row 32)
-  const mdfOffset = getRow(32);
+  // MDF offset
+  const mdfOffset = mdfRow >= 0 ? getRow(mdfRow) : getRow(32);
 
   // Totals
   const totalGPTotal = getTotal(14);
-  const totalCostTotal = getTotal(29);
+  const totalCostTotal = totalCostRow >= 0 ? getTotal(totalCostRow) : getTotal(29);
   const totalRecurringGP = getTotal(6); // accumulative total
   const totalNonRecurringGPTotal = getTotal(13);
 
@@ -177,13 +206,13 @@ export function parseBoardPlan(workbook) {
 
   // Cost breakdown totals
   const costBreakdown = [
-    { name: 'Wages (gross)', value: getTotal(17) },
-    { name: 'National Insurance', value: getTotal(23) },
-    { name: 'Pensions', value: getTotal(24) },
-    { name: 'Car Allowance', value: getTotal(25) },
-    { name: 'Phones', value: getTotal(26) },
-    { name: 'Insurance', value: getTotal(27) },
-    { name: 'Marketing / SoPro', value: getTotal(28) },
+    { name: 'Wages (gross)', value: wagesRow >= 0 ? getTotal(wagesRow) : 0 },
+    { name: 'National Insurance', value: niRow >= 0 ? getTotal(niRow) : 0 },
+    { name: 'Pensions', value: pensionsRow >= 0 ? getTotal(pensionsRow) : 0 },
+    { name: 'Car Allowance', value: carRow >= 0 ? getTotal(carRow) : 0 },
+    { name: 'Phones', value: phonesRow >= 0 ? getTotal(phonesRow) : 0 },
+    { name: 'Insurance', value: insuranceRow >= 0 ? getTotal(insuranceRow) : 0 },
+    { name: 'Marketing / SoPro', value: marketingRow >= 0 ? getTotal(marketingRow) : 0 },
   ].filter(c => c.value > 0);
 
   // GP breakdown by service type
@@ -340,11 +369,11 @@ export function parseBoardPlan(workbook) {
     closedNonRecurringGP,
     totalCostTotal,
     totalGPTotal,
-    ebitdaTotal: toNum((rows[39] || [])[months.length + 1]),
-    grossProfitTotal: getTotal(35),
-    netProfitTotal: getTotal(37),
+    ebitdaTotal: ebitdaAfterMDFRow >= 0 ? getTotal(ebitdaAfterMDFRow) : toNum((rows[39] || [])[months.length + 1]),
+    grossProfitTotal: grossProfitRow >= 0 ? getTotal(grossProfitRow) : getTotal(35),
+    netProfitTotal: netProfitRow >= 0 ? getTotal(netProfitRow) : getTotal(37),
     cumulativeEBITDAFinal: cumulativeEBITDA[cumulativeEBITDA.length - 1] || 0,
-    mdfTotal: getTotal(32),
+    mdfTotal: mdfRow >= 0 ? getTotal(mdfRow) : getTotal(32),
     deals,
     closedWonDeals,
     negotiatingDeals,

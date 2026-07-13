@@ -47,7 +47,7 @@ function inFY(p, fyStart) {
 function ymInt(p) { return p ? p.year * 12 + p.month : 0; }
 
 function monthName(p) {
-  if (!p) return '\u2013';
+  if (!p) return '-';
   const n = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${n[p.month]} ${p.year}`;
 }
@@ -125,7 +125,7 @@ function DealTable({ deals, showStage = false }) {
                 </span>
               </td>
               <td className="py-2 pr-3 text-[#5A7A95]">{d.serviceType}</td>
-              <td className="py-2 pr-3 text-[#5A7A95] text-xs max-w-[200px] truncate" title={d.description}>{d.description || '\u2013'}</td>
+              <td className="py-2 pr-3 text-[#5A7A95] text-xs max-w-[200px] truncate" title={d.description}>{d.description || '-'}</td>
               <td className="py-2 pr-3">{monthName(parseMonth(d.predictedMonth))}</td>
               <td className="py-2 pr-3">{monthName(parseMonth(d.billingStart))}</td>
               <td className="py-2 pr-3 text-right font-mono">{money(d.revenue)}</td>
@@ -406,7 +406,7 @@ export default function OverviewPage() {
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title="All Closed Won Deals"
-        subtitle={`${closedWon.length} deals closed won across all time periods \u2014 regardless of billing start date`}
+        subtitle={`${closedWon.length} deals closed won across all time periods  -  regardless of billing start date`}
         accent="#0EA5E9"
       />
       <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
@@ -419,7 +419,7 @@ export default function OverviewPage() {
           SECTION 2: DEALS CLOSED THIS MONTH
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
-        title={`Deals Closed This Month \u2013 ${nowLabel}`}
+        title={`Deals Closed This Month - ${nowLabel}`}
         subtitle={`${closedThisMonth.length} deal(s) closed won this month`}
         accent="#0EA5E9"
       />
@@ -433,8 +433,8 @@ export default function OverviewPage() {
           SECTION 3: CLOSED WON - BILLING THIS FY
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
-        title={`Closed Won \u2013 ${fy.label}`}
-        subtitle={`Closed won deals with billing starting within this financial year (Nov ${fy.start} \u2013 Oct ${fy.start + 1})`}
+        title={`Closed Won - ${fy.label}`}
+        subtitle={`Closed won deals with billing starting within this financial year (Nov ${fy.start} - Oct ${fy.start + 1})`}
         accent="#059669"
       />
       <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
@@ -458,7 +458,7 @@ export default function OverviewPage() {
       {negBillThisFY.length > 0 && (
         <>
           <SectionHeader
-            title="Negotiation \u2013 Billing This FY"
+            title="Negotiation - Billing This FY"
             subtitle={`${negBillThisFY.length} deal(s) in negotiation expected to close and start billing before end of ${fy.label}`}
             accent="#06b6d4"
           />
@@ -474,7 +474,7 @@ export default function OverviewPage() {
           SECTION 5: END OF FY POSITION
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
-        title={`End of FY Position \u2013 ${fy.endMonth}`}
+        title={`End of FY Position - ${fy.endMonth}`}
         subtitle="Projected position at the end of the current financial year"
         accent="#8b5cf6"
       />
@@ -565,7 +565,7 @@ export default function OverviewPage() {
       </InsightCard>
 
       {/* Monthly GP vs Costs Breakdown */}
-      <SubHeader>Monthly GP vs Costs \u2013 {fy.label}</SubHeader>
+      <SubHeader>Monthly GP vs Costs - {fy.label}</SubHeader>
       <div className="overflow-x-auto mb-6">
         <table className="w-full text-sm">
           <thead>
@@ -613,8 +613,8 @@ export default function OverviewPage() {
           SECTION 5: NEW FY POSITION
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
-        title={`New FY Position \u2013 ${fy.newLabel}`}
-        subtitle={`Nov ${fy.newStart} \u2013 Oct ${fy.newStart + 1}`}
+        title={`New FY Position - ${fy.newLabel}`}
+        subtitle={`Nov ${fy.newStart} - Oct ${fy.newStart + 1}`}
         accent="#f59e0b"
       />
       <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
@@ -624,7 +624,7 @@ export default function OverviewPage() {
       {/* 1. Already Secured - CW deals billing in new FY */}
       {newFYNewDeals.length > 0 && (
         <>
-          <SubHeader>Already Secured (Closed Won \u2013 Billing New FY)</SubHeader>
+          <SubHeader>Already Secured (Closed Won - Billing New FY)</SubHeader>
           <InsightCard accent="#059669">
             <p className="text-[#5A7A95] text-xs mb-3">
               Deals already closed won with billing starting in {fy.newLabel} &mdash; cash coming in without closing new deals.
@@ -710,14 +710,9 @@ export default function OverviewPage() {
         const newFYMonthlyCosts = monthlyCosts + newHireMonthlyCost;
         const totalFYCosts = newFYMonthlyCosts * 12;
 
-        // New hire predicted GP (R78 for 10 months from Jan)
-        const hireR78GP = (1000 + 300) * 55; // sum(1..10) = 55
-        const hireNRGP = (5000 + 2000) * 10;
-        const totalWithHireGP = totalFYGP + hireR78GP + hireNRGP;
-
         return (
           <>
-            <SubHeader>New FY Financial Forecast \u2013 GP vs Costs</SubHeader>
+            <SubHeader>New FY Financial Forecast - GP vs Costs</SubHeader>
             <InsightCard accent="#f59e0b">
               <p className="text-white font-semibold mb-3">{fy.newLabel} Forecast (R78-Weighted)</p>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm mb-4">
@@ -736,7 +731,7 @@ export default function OverviewPage() {
                   <p className="text-amber-400 font-bold">{money(totalNewFYNRGP)}</p>
                 </div>
               </div>
-              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-[#5A7A95] text-xs">Total FY GP (Pipeline)</p>
                   <p className="text-[#f59e0b] font-bold text-lg">{money(totalFYGP)}</p>
@@ -747,17 +742,10 @@ export default function OverviewPage() {
                   <p className="text-[#5A7A95] text-[10px]">{money(newFYMonthlyCosts)}/mo × 12</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">FY P&amp;L (Pipeline Only)</p>
+                  <p className="text-[#5A7A95] text-xs">FY Net P&amp;L</p>
                   <p className={`font-bold text-lg ${totalFYGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
                     {money(totalFYGP - totalFYCosts)}
                   </p>
-                </div>
-                <div>
-                  <p className="text-[#5A7A95] text-xs">FY P&amp;L (+ New Hire GP)</p>
-                  <p className={`font-bold text-lg ${totalWithHireGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
-                    {money(totalWithHireGP - totalFYCosts)}
-                  </p>
-                  <p className="text-[#5A7A95] text-[10px]">+{money(hireR78GP + hireNRGP)} predicted</p>
                 </div>
               </div>
             </InsightCard>
@@ -765,7 +753,7 @@ export default function OverviewPage() {
             {/* New Hire Cost Breakdown */}
             {newHires.length > 0 && (
               <div className={`${card} mt-4 mb-6`}>
-                <p className="text-white font-semibold mb-3 text-sm">Planned New Hires \u2013 {fy.newLabel}</p>
+                <p className="text-white font-semibold mb-3 text-sm">Planned New Hires - {fy.newLabel}</p>
                 <p className="text-[#5A7A95] text-[10px] mb-3">Employer NI calculated at 15% above £5,000 threshold. No car allowance.</p>
                 <table className="w-full text-sm">
                   <thead>
@@ -852,27 +840,6 @@ export default function OverviewPage() {
                 rows.push({ label: '+ Qualified / Lead', monthlyGP: qualS.monthlyGP, nrGP: qualS.nrGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: qualDeals.length });
               }
 
-              // Row 7: + Predicted New Hire GP (not yet in pipeline)
-              // Alysha: £1k new recurring GP/mo, £5k NR GP/mo — starts Jan
-              // Lead Gen: £300 new recurring GP/mo, £2k NR GP/mo — starts Jan
-              // Rule of 78 for remaining FY months: Jan to Oct = 10 months, sum(1..10) = 55
-              const hireMonths = 10; // Jan to Oct
-              const r78Factor = (hireMonths * (hireMonths + 1)) / 2; // 55
-              const alyshaR78 = 1000 * r78Factor; // £55,000
-              const alyshaNR = 5000 * hireMonths; // £50,000
-              const leadGenR78 = 300 * r78Factor; // £16,500
-              const leadGenNR = 2000 * hireMonths; // £20,000
-              const newHireTotalNRGP = alyshaNR + leadGenNR; // £70,000
-              const newHireTotalR78GP = alyshaR78 + leadGenR78; // £71,500
-              // By end of FY monthly recurring position:
-              const newHireEndMonthlyGP = (1000 + 300) * hireMonths; // £13k/mo by Oct
-              // Average monthly recurring GP over the 10 months
-              const newHireAvgMonthlyGP = Math.round((alyshaR78 + leadGenR78) / hireMonths); // ~£7,150/mo avg
-
-              gpRunning += newHireAvgMonthlyGP;
-              nrRunning += newHireTotalNRGP;
-              rows.push({ label: '+ New Hire Predicted GP*', monthlyGP: newHireAvgMonthlyGP, nrGP: newHireTotalNRGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: null, isNewHire: true });
-
               let crossedAt = null;
               for (const r of rows) {
                 if (r.runningGP >= r.runningCost && r.runningGP > 0 && !crossedAt) crossedAt = r.label;
@@ -904,17 +871,17 @@ export default function OverviewPage() {
                         return (
                           <tr key={i} className={`border-b border-[#2A4A6F]/40 ${isPositive ? 'bg-[#059669]/10' : ''}`}>
                             <td className="py-2 text-white font-medium">{r.label}</td>
-                            <td className="py-2 text-right font-mono text-[#5A7A95]">{r.deals || '\u2013'}</td>
+                            <td className="py-2 text-right font-mono text-[#5A7A95]">{r.deals || '-'}</td>
                             <td className="py-2 text-right font-mono">
-                              {isCostRow ? <span className="text-[#5A7A95]">\u2013</span> : <span className="text-[#059669]">{money(r.monthlyGP)}</span>}
+                              {isCostRow ? <span className="text-[#5A7A95]">-</span> : <span className="text-[#059669]">{money(r.monthlyGP)}</span>}
                             </td>
                             <td className="py-2 text-right font-mono">
-                              {r.nrGP > 0 ? <span className="text-amber-400">{money(r.nrGP)}</span> : <span className="text-[#5A7A95]">\u2013</span>}
+                              {r.nrGP > 0 ? <span className="text-amber-400">{money(r.nrGP)}</span> : <span className="text-[#5A7A95]">-</span>}
                             </td>
-                            <td className="py-2 text-right font-mono text-white font-bold">{r.runningGP > 0 ? money(r.runningGP) : '\u2013'}</td>
+                            <td className="py-2 text-right font-mono text-white font-bold">{r.runningGP > 0 ? money(r.runningGP) : '-'}</td>
                             <td className="py-2 text-right font-mono text-red-400">{money(r.runningCost)}</td>
                             <td className={`py-2 text-right font-mono font-bold ${isPositive ? 'text-[#059669]' : r.runningGP > 0 ? 'text-red-400' : 'text-[#5A7A95]'}`}>
-                              {r.runningGP > 0 ? money(gap) : '\u2013'}
+                              {r.runningGP > 0 ? money(gap) : '-'}
                             </td>
                           </tr>
                         );
@@ -931,9 +898,6 @@ export default function OverviewPage() {
                       ✗ Monthly recurring GP does not cover costs even with full pipeline. NR project revenue of {money(nrRunning)} helps offset &mdash; see annual view above.
                     </p>
                   )}
-                  <p className="text-[#5A7A95] text-[10px] mt-3 italic">
-                    * New Hire Predicted GP (R78 for 10 months, Jan\u2013Oct): Alysha (£1k recurring GP/mo + £5k NR/mo = £105k) and Lead Generation (£300 recurring GP/mo + £2k NR/mo = £36.5k). These deals are NOT yet in the pipeline — predicted contribution from new sales capacity.
-                  </p>
                 </div>
               );
             })()}
@@ -948,13 +912,10 @@ export default function OverviewPage() {
                 fyMonths.push({ mi, yr, label: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mi]} ${yr}` });
               }
 
-              // Base recurring GP (existing deals already billing, carry forward every month)
-              const baseRecGP = newFYCombinedBaseSummary.monthlyGP;
-              // New hire contribution starts from Jan (month index 2 in our array: Nov=0, Dec=1, Jan=2)
-              const hireStartIdx = 2; // Jan is 3rd month of FY
-
               // All pipeline deals for new FY: CW + Negotiating + Quoting + Qualified/Lead
               const allPipelineDeals = [...newFYNewDeals, ...newFYPipeline];
+              // Base recurring GP (existing deals already billing, carry forward every month)
+              const baseRecGP = newFYCombinedBaseSummary.monthlyGP;
 
               // For each deal, determine which FY month index it starts billing
               const dealsByFYMonthIdx = allPipelineDeals.map(d => {
@@ -974,18 +935,7 @@ export default function OverviewPage() {
                 return { ...d, fyIdx };
               });
 
-              let alyshaRunning = 0;
-              let leadGenRunning = 0;
-
               const monthRows = fyMonths.map((fm, idx) => {
-                const isHireActive = idx >= hireStartIdx;
-                if (isHireActive) {
-                  alyshaRunning += 1000;
-                  leadGenRunning += 300;
-                }
-                const hireRecGP = alyshaRunning + leadGenRunning;
-                const hireNRGP = isHireActive ? (5000 + 2000) : 0;
-
                 // Pipeline deals: recurring GP from deals billing on or before this month
                 const activeDeals = dealsByFYMonthIdx.filter(d => d.fyIdx <= idx);
                 const pipelineRecGP = activeDeals
@@ -996,16 +946,14 @@ export default function OverviewPage() {
                   .filter(d => d.fyIdx === idx && d.dealType !== 'Recurring')
                   .reduce((s, d) => s + d.profit, 0);
 
-                const totalMonthlyGP = baseRecGP + pipelineRecGP + hireRecGP;
-                const totalMonthlyWithNR = totalMonthlyGP + hireNRGP + pipelineNRGP;
+                const totalMonthlyGP = baseRecGP + pipelineRecGP;
+                const totalMonthlyWithNR = totalMonthlyGP + pipelineNRGP;
 
                 return {
                   ...fm,
                   baseRecGP,
                   pipelineRecGP,
                   pipelineNRGP,
-                  hireRecGP,
-                  hireNRGP,
                   totalMonthlyGP,
                   totalMonthlyWithNR,
                 };
@@ -1015,9 +963,9 @@ export default function OverviewPage() {
 
               const monthTable = (
                 <div className={`${card} mt-4 mb-6`}>
-                  <p className="text-white font-semibold mb-1 text-sm">{fy.newLabel} Monthly Forecast (All Deals + New Hire GP)</p>
+                  <p className="text-white font-semibold mb-1 text-sm">{fy.newLabel} Monthly Forecast (All Pipeline Deals)</p>
                   <p className="text-[#5A7A95] text-[10px] mb-3">
-                    Base recurring + pipeline deals (CW, Negotiation, Quoting, Qualified/Lead) layered in by billing start month + cumulative new hire GP from Jan {fy.newStart + 1}.
+                    Base recurring + pipeline deals (CW, Negotiation, Quoting, Qualified/Lead) layered in by billing start month. Costs include all planned new hires.
                   </p>
                   <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -1027,8 +975,6 @@ export default function OverviewPage() {
                         <th className="text-right py-1">Base Rec</th>
                         <th className="text-right py-1">Pipeline Rec</th>
                         <th className="text-right py-1">Pipeline NR</th>
-                        <th className="text-right py-1">New Hire Rec</th>
-                        <th className="text-right py-1">Hire NR</th>
                         <th className="text-right py-1">Total GP</th>
                         <th className="text-right py-1">Costs</th>
                         <th className="text-right py-1">Net</th>
@@ -1041,10 +987,8 @@ export default function OverviewPage() {
                           <tr key={i} className={`border-b border-[#2A4A6F]/40 ${net >= 0 ? 'bg-[#059669]/10' : ''}`}>
                             <td className="py-1 text-white text-xs">{mr.label}</td>
                             <td className="py-1 text-right font-mono text-xs text-[#0EA5E9]">{money(mr.baseRecGP)}</td>
-                            <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.pipelineRecGP > 0 ? money(mr.pipelineRecGP) : '\u2013'}</td>
-                            <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.pipelineNRGP > 0 ? money(mr.pipelineNRGP) : '\u2013'}</td>
-                            <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.hireRecGP > 0 ? money(mr.hireRecGP) : '\u2013'}</td>
-                            <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.hireNRGP > 0 ? money(mr.hireNRGP) : '\u2013'}</td>
+                            <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.pipelineRecGP > 0 ? money(mr.pipelineRecGP) : '-'}</td>
+                            <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.pipelineNRGP > 0 ? money(mr.pipelineNRGP) : '-'}</td>
                             <td className="py-1 text-right font-mono text-xs text-white font-bold">{money(mr.totalMonthlyWithNR)}</td>
                             <td className="py-1 text-right font-mono text-xs text-red-400">{money(newFYMonthlyCostsLocal)}</td>
                             <td className={`py-1 text-right font-mono text-xs font-bold ${net >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(net)}</td>
@@ -1058,8 +1002,6 @@ export default function OverviewPage() {
                         <td className="py-2 text-right font-mono text-[#0EA5E9]">{money(monthRows.reduce((s, m) => s + m.baseRecGP, 0))}</td>
                         <td className="py-2 text-right font-mono text-[#f59e0b]">{money(monthRows.reduce((s, m) => s + m.pipelineRecGP, 0))}</td>
                         <td className="py-2 text-right font-mono text-amber-400">{money(monthRows.reduce((s, m) => s + m.pipelineNRGP, 0))}</td>
-                        <td className="py-2 text-right font-mono text-[#f59e0b]">{money(monthRows.reduce((s, m) => s + m.hireRecGP, 0))}</td>
-                        <td className="py-2 text-right font-mono text-amber-400">{money(monthRows.reduce((s, m) => s + m.hireNRGP, 0))}</td>
                         <td className="py-2 text-right font-mono">{money(monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0))}</td>
                         <td className="py-2 text-right font-mono text-red-400">{money(newFYMonthlyCostsLocal * 12)}</td>
                         <td className={`py-2 text-right font-mono font-bold ${monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0) - newFYMonthlyCostsLocal * 12 >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
@@ -1091,7 +1033,7 @@ export default function OverviewPage() {
               const totalFYCostsAll = newFYMonthlyCostsLocal * 12;
               const fyNetPL = totalFYGPEarned - totalFYCostsAll;
               const endOfFYSurplus = endOfFYMonthlyWithNR - newFYMonthlyCostsLocal;
-              const totalNRContrib = monthRows.reduce((s, m) => s + m.hireNRGP, 0) + totalNewFYNRGP;
+              const totalNRContrib = monthRows.reduce((s, m) => s + m.pipelineNRGP, 0) + totalNewFYNRGP;
 
               const summaryCard = (
                 <div className={`${card} mt-6 mb-6 border-l-4 ${fyNetPL >= 0 ? 'border-l-[#059669]' : 'border-l-red-400'}`}>
@@ -1121,20 +1063,20 @@ export default function OverviewPage() {
                     <div className="text-center">
                       <p className="text-[#5A7A95] text-xs mb-1">NR GP Contribution</p>
                       <p className="text-amber-400 font-bold text-xl">{money(totalNRContrib)}</p>
-                      <p className="text-[#5A7A95] text-[10px]">Project + New Hire NR</p>
+                      <p className="text-[#5A7A95] text-[10px]">Project NR GP</p>
                     </div>
                   </div>
 
                   <div className="border-t border-[#2A4A6F] pt-4">
                     <p className="text-white font-semibold text-xs mb-3">Run-Rate Entering Next FY ({`Nov ${fy.newStart + 1}`})</p>
                     <p className="text-[#5A7A95] text-[10px] mb-3 italic">
-                      The monthly recurring figures we carry forward — this becomes the baseline for the following year's forecast.
+                      The monthly recurring figures we carry forward. This becomes the baseline for the following year.
                     </p>
                     <div className="grid grid-cols-3 gap-6 text-sm">
                       <div className="text-center">
                         <p className="text-[#5A7A95] text-xs mb-1">Monthly Recurring GP</p>
                         <p className="text-[#059669] font-bold text-lg">{money(endOfFYMonthlyGP)}</p>
-                        <p className="text-[#5A7A95] text-[10px]">Base + accumulated new hire GP</p>
+                        <p className="text-[#5A7A95] text-[10px]">Base + pipeline recurring GP</p>
                       </div>
                       <div className="text-center">
                         <p className="text-[#5A7A95] text-xs mb-1">Monthly Costs</p>
@@ -1152,7 +1094,23 @@ export default function OverviewPage() {
                 </div>
               );
 
-              return <>{monthTable}{summaryCard}</>;
+              // Dec cashflow note (c.£90k engineering GP landing in Dec)
+              const decNRGP = monthRows.find(m => m.mi === 11); // Dec
+              const decCashflow = decNRGP ? decNRGP.pipelineNRGP : 90000;
+              const monthsOfCoverage = newFYMonthlyCostsLocal > 0 ? Math.floor(decCashflow / newFYMonthlyCostsLocal) : 0;
+
+              const cashflowNote = decCashflow > 50000 ? (
+                <div className={`${card} mt-4 mb-6 border-l-4 border-l-[#0EA5E9]`}>
+                  <p className="text-white font-semibold text-sm mb-2">Cashflow Note - December {fy.newStart}</p>
+                  <p className="text-[#5A7A95] text-xs">
+                    Circa <span className="text-[#0EA5E9] font-bold">{money(decCashflow)}</span> of non-recurring project GP lands in December,
+                    which covers the cost vs GP gap for approximately <span className="text-[#0EA5E9] font-bold">{monthsOfCoverage} months</span> of
+                    operating costs ({money(newFYMonthlyCostsLocal)}/mo). This provides a significant cash buffer while recurring revenue builds through the new FY.
+                  </p>
+                </div>
+              ) : null;
+
+              return <>{monthTable}{summaryCard}{cashflowNote}</>;
             })()}
           </>
         );
