@@ -1284,7 +1284,7 @@ function BoardPlanDashboard({ boardPlan }) {
           <div>
             <h1 className="text-2xl font-bold text-white">Board Business Plan</h1>
             <p className="text-sm text-[#5A7A95] mt-1">
-              {scenarioLabel || 'Negotiating + Closed-Won deals'} — Forecast to Dec 2026
+              {scenarioLabel || 'Negotiating + Closed-Won deals'} — {cwPeriodLabel}
             </p>
           </div>
           {breakevenMonth ? (
@@ -1300,24 +1300,49 @@ function BoardPlanDashboard({ boardPlan }) {
           )}
         </div>
 
+        {/* Period filter */}
+        <div className="flex gap-2 flex-wrap no-print">
+          {[
+            { id: 'month', label: 'This Month' },
+            { id: 'quarter', label: 'This Quarter' },
+            { id: 'fy', label: 'This FY' },
+            { id: 'year', label: 'Calendar Year' },
+            { id: 'all', label: 'All Time' },
+          ].map(b => (
+            <button key={b.id} onClick={() => setCwPeriod(b.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${cwPeriod === b.id ? 'bg-[#0EA5E9] text-white' : 'bg-[#0D2338] border border-[#2A4A6F] text-[#5A7A95] hover:text-white'}`}
+            >{b.label}</button>
+          ))}
+        </div>
+
         {/* Year-End Forecast Summary — from Figures tab */}
         {(() => {
+          // Apply period filter to deals
+          const fCW = closedWonDeals.filter(cwPeriodFilter);
+          const fNeg = negotiatingDeals.filter(cwPeriodFilter);
+          const fCwRec = fCW.filter(d => d.dealType === 'Recurring').map(d => ({ ...d, r78: calcRule78GP(d, 'year') }));
+          const fCwNR = fCW.filter(d => d.dealType !== 'Recurring');
+          const fNegRec = fNeg.filter(d => d.dealType === 'Recurring').map(d => ({ ...d, r78: calcRule78GP(d, 'year') }));
+          const fNegNR = fNeg.filter(d => d.dealType !== 'Recurring');
+          const fQuoting = quotingDeals.filter(cwPeriodFilter);
+          const fEarly = earlyStageDeals.filter(cwPeriodFilter);
+
           // CW Only scenario — computed from deal-level data using R78
-          const cwOnlyRecGP = cwRecWithR78Cal.reduce((s, d) => s + d.r78.resultGP, 0);
-          const cwOnlyNRGP = cwNonRecurring.reduce((s, d) => s + d.profit, 0);
+          const cwOnlyRecGP = fCwRec.reduce((s, d) => s + d.r78.resultGP, 0);
+          const cwOnlyNRGP = fCwNR.reduce((s, d) => s + d.profit, 0);
           const cwOnlyTotalGP = cwOnlyRecGP + cwOnlyNRGP;
           const cwOnlyGrossProfit = cwOnlyTotalGP - totalCostTotal;
           const cwOnlyNetProfit = cwOnlyGrossProfit + (mdfTotal || 0);
 
           // Negotiating pipeline addition
-          const negRecGP = negRecWithR78Cal.reduce((s, d) => s + d.r78.resultGP, 0);
-          const negNRGP = negotiatingDeals.filter(d => d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+          const negRecGP = fNegRec.reduce((s, d) => s + d.r78.resultGP, 0);
+          const negNRGP = fNegNR.reduce((s, d) => s + d.profit, 0);
           const negTotalGP = negRecGP + negNRGP;
 
-          // Full forecast (CW + Negotiating) — from figures tab
-          const fullTotalGP = totalGPTotal;
-          const fullGrossProfit = grossProfitTotal;
-          const fullNetProfit = netProfitTotal;
+          // Full forecast (CW + Negotiating)
+          const fullTotalGP = cwOnlyTotalGP + negTotalGP;
+          const fullGrossProfit = fullTotalGP - totalCostTotal;
+          const fullNetProfit = fullGrossProfit + (mdfTotal || 0);
 
           const ScenarioCard = ({ label, borderColor, bgColor, textColor, gp, cost, gross, mdf, net }) => (
             <div className={`rounded-xl border-2 ${borderColor} ${bgColor} p-5`}>
@@ -1438,30 +1463,30 @@ function BoardPlanDashboard({ boardPlan }) {
           <div className="border-t border-[#2A4A6F] pt-4">
             <h3 className="text-sm font-bold text-white mb-3">Deal Pipeline Status</h3>
             <p className="text-xs text-[#A0B4C8] mb-3">
-              {closedWonCount} deals are confirmed Closed/Won ({money(cwOnlyTotalGP)} R78-weighted GP), {negotiatingCount} are in negotiation ({money(negTotalGP)} R78-weighted GP). The gap between confirmed and full forecast is {money(negTotalGP)} GP still at risk.
+              {fCW.length} deals are confirmed Closed/Won ({money(cwOnlyTotalGP)} R78-weighted GP), {fNeg.length} are in negotiation ({money(negTotalGP)} R78-weighted GP). The gap between confirmed and full forecast is {money(negTotalGP)} GP still at risk.
             </p>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-lg border border-[#059669]/30 bg-[#059669]/5 p-3">
                 <p className="text-[10px] text-[#059669] font-semibold uppercase tracking-wide">Closed / Won</p>
-                <p className="text-lg font-bold text-white mt-1">{closedWonCount} deals</p>
+                <p className="text-lg font-bold text-white mt-1">{fCW.length} deals</p>
                 <p className="text-xs text-[#059669]">R78 GP: {money(cwOnlyTotalGP)}</p>
                 <p className="text-[10px] text-[#5A7A95]">({money(cwOnlyRecGP)} rec + {money(cwOnlyNRGP)} NR)</p>
               </div>
               <div className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-3">
                 <p className="text-[10px] text-[#f59e0b] font-semibold uppercase tracking-wide">Negotiating</p>
-                <p className="text-lg font-bold text-white mt-1">{negotiatingCount} deals</p>
+                <p className="text-lg font-bold text-white mt-1">{fNeg.length} deals</p>
                 <p className="text-xs text-[#f59e0b]">R78 GP: {money(negTotalGP)}</p>
                 <p className="text-[10px] text-[#5A7A95]">({money(negRecGP)} rec + {money(negNRGP)} NR)</p>
               </div>
               <div className="rounded-lg border border-[#8b5cf6]/30 bg-[#8b5cf6]/5 p-3">
                 <p className="text-[10px] text-[#8b5cf6] font-semibold uppercase tracking-wide">Quoting</p>
-                <p className="text-lg font-bold text-white mt-1">{quotingCount} deals</p>
-                <p className="text-xs text-[#5A7A95]">GP: {money(quotingDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+                <p className="text-lg font-bold text-white mt-1">{fQuoting.length} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(fQuoting.reduce((s, d) => s + d.profit, 0))}/mo</p>
               </div>
               <div className="rounded-lg border border-[#5A7A95]/30 bg-[#5A7A95]/5 p-3">
                 <p className="text-[10px] text-[#5A7A95] font-semibold uppercase tracking-wide">Early Stage</p>
-                <p className="text-lg font-bold text-white mt-1">{earlyStageCount} deals</p>
-                <p className="text-xs text-[#5A7A95]">GP: {money(earlyStageDeals.reduce((s, d) => s + d.profit, 0))}/mo</p>
+                <p className="text-lg font-bold text-white mt-1">{fEarly.length} deals</p>
+                <p className="text-xs text-[#5A7A95]">GP: {money(fEarly.reduce((s, d) => s + d.profit, 0))}/mo</p>
               </div>
             </div>
           </div>
