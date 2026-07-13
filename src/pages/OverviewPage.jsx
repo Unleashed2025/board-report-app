@@ -824,6 +824,27 @@ export default function OverviewPage() {
                 rows.push({ label: '+ Qualified / Lead', monthlyGP: qualS.monthlyGP, nrGP: qualS.nrGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: qualDeals.length });
               }
 
+              // Row 7: + Predicted New Hire GP (not yet in pipeline)
+              // Alysha: £1k new recurring GP/mo, £5k NR GP/mo — starts Jan
+              // Lead Gen: £300 new recurring GP/mo, £2k NR GP/mo — starts Jan
+              // Rule of 78 for remaining FY months: Jan to Oct = 10 months, sum(1..10) = 55
+              const hireMonths = 10; // Jan to Oct
+              const r78Factor = (hireMonths * (hireMonths + 1)) / 2; // 55
+              const alyshaR78 = 1000 * r78Factor; // £55,000
+              const alyshaNR = 5000 * hireMonths; // £50,000
+              const leadGenR78 = 300 * r78Factor; // £16,500
+              const leadGenNR = 2000 * hireMonths; // £20,000
+              const newHireTotalNRGP = alyshaNR + leadGenNR; // £70,000
+              const newHireTotalR78GP = alyshaR78 + leadGenR78; // £71,500
+              // By end of FY monthly recurring position:
+              const newHireEndMonthlyGP = (1000 + 300) * hireMonths; // £13k/mo by Oct
+              // Average monthly recurring GP over the 10 months
+              const newHireAvgMonthlyGP = Math.round((alyshaR78 + leadGenR78) / hireMonths); // ~£7,150/mo avg
+
+              gpRunning += newHireAvgMonthlyGP;
+              nrRunning += newHireTotalNRGP;
+              rows.push({ label: '+ New Hire Predicted GP*', monthlyGP: newHireAvgMonthlyGP, nrGP: newHireTotalNRGP, costDelta: 0, runningCost: totalCost, runningGP: gpRunning, runningNR: nrRunning, deals: null, isNewHire: true });
+
               let crossedAt = null;
               for (const r of rows) {
                 if (r.runningGP >= r.runningCost && r.runningGP > 0 && !crossedAt) crossedAt = r.label;
@@ -882,6 +903,114 @@ export default function OverviewPage() {
                       ✗ Monthly recurring GP does not cover costs even with full pipeline. NR project revenue of {money(nrRunning)} helps offset &mdash; see annual view above.
                     </p>
                   )}
+                  <p className="text-[#5A7A95] text-[10px] mt-3 italic">
+                    * New Hire Predicted GP (R78 for 10 months, Jan\u2013Oct): Alysha (£1k recurring GP/mo + £5k NR/mo = £105k) and Lead Generation (£300 recurring GP/mo + £2k NR/mo = £36.5k). These deals are NOT yet in the pipeline — predicted contribution from new sales capacity.
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* Month-by-Month New FY Forecast with New Hire GP */}
+            {(() => {
+              // Build month-by-month: Nov 26 to Oct 27
+              const fyMonths = [];
+              for (let m = 0; m < 12; m++) {
+                const mi = (10 + m) % 12; // Nov=10, Dec=11, Jan=0...Oct=9
+                const yr = mi >= 10 ? fy.newStart : fy.newStart + 1;
+                fyMonths.push({ mi, yr, label: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mi]} ${yr}` });
+              }
+
+              // Base recurring GP (existing pipeline, flat per month)
+              const baseRecGP = newFYCombinedBaseSummary.monthlyGP;
+              // New hire contribution starts from Jan (month index 2 in our array: Nov=0, Dec=1, Jan=2)
+              const hireStartIdx = 2; // Jan is 3rd month of FY
+
+              let alyshaRunning = 0;
+              let leadGenRunning = 0;
+
+              const monthRows = fyMonths.map((fm, idx) => {
+                const isHireActive = idx >= hireStartIdx;
+                if (isHireActive) {
+                  alyshaRunning += 1000; // adds £1k recurring each month
+                  leadGenRunning += 300;
+                }
+                const hireRecGP = alyshaRunning + leadGenRunning;
+                const hireNRGP = isHireActive ? (5000 + 2000) : 0; // £7k NR/mo when active
+                const totalMonthlyGP = baseRecGP + hireRecGP;
+                const totalMonthlyWithNR = totalMonthlyGP + hireNRGP;
+
+                return {
+                  ...fm,
+                  baseRecGP,
+                  hireRecGP,
+                  hireNRGP,
+                  totalMonthlyGP,
+                  totalMonthlyWithNR,
+                };
+              });
+
+              const newFYMonthlyCostsLocal = monthlyCosts + newHires.reduce((s, h) => s + h.totalMonthlyCost, 0);
+
+              return (
+                <div className={`${card} mt-4 mb-6`}>
+                  <p className="text-white font-semibold mb-1 text-sm">{fy.newLabel} Monthly Forecast (incl. New Hire GP)</p>
+                  <p className="text-[#5A7A95] text-[10px] mb-3">
+                    Existing recurring base + cumulative new hire GP growth from Jan {fy.newStart + 1}. Shows when monthly GP exceeds costs.
+                  </p>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[#5A7A95] text-xs border-b border-[#2A4A6F]">
+                        <th className="text-left py-1">Month</th>
+                        <th className="text-right py-1">Base Rec GP</th>
+                        <th className="text-right py-1">New Hire Rec</th>
+                        <th className="text-right py-1">NR GP</th>
+                        <th className="text-right py-1">Total GP</th>
+                        <th className="text-right py-1">Costs</th>
+                        <th className="text-right py-1">Net</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthRows.map((mr, i) => {
+                        const net = mr.totalMonthlyWithNR - newFYMonthlyCostsLocal;
+                        return (
+                          <tr key={i} className={`border-b border-[#2A4A6F]/40 ${net >= 0 ? 'bg-[#059669]/10' : ''}`}>
+                            <td className="py-1 text-white text-xs">{mr.label}</td>
+                            <td className="py-1 text-right font-mono text-xs text-[#0EA5E9]">{money(mr.baseRecGP)}</td>
+                            <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.hireRecGP > 0 ? money(mr.hireRecGP) : '\u2013'}</td>
+                            <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.hireNRGP > 0 ? money(mr.hireNRGP) : '\u2013'}</td>
+                            <td className="py-1 text-right font-mono text-xs text-white font-bold">{money(mr.totalMonthlyWithNR)}</td>
+                            <td className="py-1 text-right font-mono text-xs text-red-400">{money(newFYMonthlyCostsLocal)}</td>
+                            <td className={`py-1 text-right font-mono text-xs font-bold ${net >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(net)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-[#2A4A6F] text-white font-semibold text-xs">
+                        <td className="py-2">FY Total</td>
+                        <td className="py-2 text-right font-mono text-[#0EA5E9]">{money(monthRows.reduce((s, m) => s + m.baseRecGP, 0))}</td>
+                        <td className="py-2 text-right font-mono text-[#f59e0b]">{money(monthRows.reduce((s, m) => s + m.hireRecGP, 0))}</td>
+                        <td className="py-2 text-right font-mono text-amber-400">{money(monthRows.reduce((s, m) => s + m.hireNRGP, 0))}</td>
+                        <td className="py-2 text-right font-mono">{money(monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0))}</td>
+                        <td className="py-2 text-right font-mono text-red-400">{money(newFYMonthlyCostsLocal * 12)}</td>
+                        <td className={`py-2 text-right font-mono font-bold ${monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0) - newFYMonthlyCostsLocal * 12 >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
+                          {money(monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0) - newFYMonthlyCostsLocal * 12)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  {(() => {
+                    const breakEvenMonth = monthRows.find(mr => mr.totalMonthlyWithNR >= newFYMonthlyCostsLocal);
+                    return breakEvenMonth ? (
+                      <p className="text-[#059669] text-xs mt-3 font-semibold">
+                        ✓ Monthly GP exceeds costs from: {breakEvenMonth.label}
+                      </p>
+                    ) : (
+                      <p className="text-red-400 text-xs mt-3 font-semibold">
+                        ✗ Monthly GP does not exceed costs within the FY
+                      </p>
+                    );
+                  })()}
                 </div>
               );
             })()}
