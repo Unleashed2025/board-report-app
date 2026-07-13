@@ -979,7 +979,7 @@ export default function OverviewPage() {
 
               const newFYMonthlyCostsLocal = monthlyCosts + newHires.reduce((s, h) => s + h.totalMonthlyCost, 0);
 
-              return (
+              const monthTable = (
                 <div className={`${card} mt-4 mb-6`}>
                   <p className="text-white font-semibold mb-1 text-sm">{fy.newLabel} Monthly Forecast (incl. New Hire GP)</p>
                   <p className="text-[#5A7A95] text-[10px] mb-3">
@@ -1041,6 +1041,76 @@ export default function OverviewPage() {
                   })()}
                 </div>
               );
+
+              const lastMonth = monthRows[monthRows.length - 1];
+              const endOfFYMonthlyGP = lastMonth.totalMonthlyGP;
+              const endOfFYMonthlyWithNR = lastMonth.totalMonthlyWithNR;
+              const totalFYGPEarned = monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0);
+              const totalFYCostsAll = newFYMonthlyCostsLocal * 12;
+              const fyNetPL = totalFYGPEarned - totalFYCostsAll;
+              const endOfFYSurplus = endOfFYMonthlyWithNR - newFYMonthlyCostsLocal;
+              const totalNRContrib = monthRows.reduce((s, m) => s + m.hireNRGP, 0) + totalNewFYNRGP;
+
+              const summaryCard = (
+                <div className={`${card} mt-6 mb-6 border-l-4 ${fyNetPL >= 0 ? 'border-l-[#059669]' : 'border-l-red-400'}`}>
+                  <p className="text-white font-semibold mb-1 text-sm">📊 End of {fy.newLabel} Summary</p>
+                  <p className="text-[#5A7A95] text-[10px] mb-4 italic">
+                    Full FY position: total GP earned (recurring R78 + NR) vs total costs over 12 months. Shows profit/loss and the monthly run-rate we carry into the following FY.
+                  </p>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">Total FY GP Earned</p>
+                      <p className="text-[#f59e0b] font-bold text-xl">{money(totalFYGPEarned)}</p>
+                      <p className="text-[#5A7A95] text-[10px]">Recurring (R78) + NR over 12 months</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">Total FY Costs</p>
+                      <p className="text-red-400 font-bold text-xl">{money(totalFYCostsAll)}</p>
+                      <p className="text-[#5A7A95] text-[10px]">{money(newFYMonthlyCostsLocal)}/mo × 12</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">FY Net Profit / Loss</p>
+                      <p className={`font-bold text-xl ${fyNetPL >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
+                        {money(fyNetPL)}
+                      </p>
+                      <p className="text-[#5A7A95] text-[10px]">{fyNetPL >= 0 ? '✓ Profitable' : '✗ Loss-making'}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">NR GP Contribution</p>
+                      <p className="text-amber-400 font-bold text-xl">{money(totalNRContrib)}</p>
+                      <p className="text-[#5A7A95] text-[10px]">Project + New Hire NR</p>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[#2A4A6F] pt-4">
+                    <p className="text-white font-semibold text-xs mb-3">Run-Rate Entering Next FY ({`Nov ${fy.newStart + 1}`})</p>
+                    <p className="text-[#5A7A95] text-[10px] mb-3 italic">
+                      The monthly recurring figures we carry forward — this becomes the baseline for the following year's forecast.
+                    </p>
+                    <div className="grid grid-cols-3 gap-6 text-sm">
+                      <div className="text-center">
+                        <p className="text-[#5A7A95] text-xs mb-1">Monthly Recurring GP</p>
+                        <p className="text-[#059669] font-bold text-lg">{money(endOfFYMonthlyGP)}</p>
+                        <p className="text-[#5A7A95] text-[10px]">Base + accumulated new hire GP</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[#5A7A95] text-xs mb-1">Monthly Costs</p>
+                        <p className="text-red-400 font-bold text-lg">{money(newFYMonthlyCostsLocal)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[#5A7A95] text-xs mb-1">Monthly Surplus / Gap</p>
+                        <p className={`font-bold text-lg ${endOfFYSurplus >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
+                          {money(endOfFYSurplus)}
+                        </p>
+                        <p className="text-[#5A7A95] text-[10px]">{endOfFYSurplus >= 0 ? 'Covering costs from recurring alone' : 'NR projects still needed to cover gap'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+
+              return <>{monthTable}{summaryCard}</>;
             })()}
           </>
         );
