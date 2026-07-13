@@ -482,6 +482,38 @@ export default function OverviewPage() {
         Shows our monthly recurring GP vs monthly costs at the end of {fy.label}. First view uses confirmed (Closed Won) deals only. Second view adds negotiation deals assuming they all close &mdash; giving a best-case scenario.
       </p>
 
+      {/* FY Profit / Loss highlight */}
+      {(() => {
+        const fyTotalGP = fyMonthlyBreakdown.reduce((s, m) => s + m.totalGP, 0);
+        const fyTotalCost = fyMonthlyBreakdown.reduce((s, m) => s + m.totalCost, 0);
+        const fyNetProfit = fyMonthlyBreakdown.reduce((s, m) => s + m.netProfit, 0);
+        const fyEBITDA = fyMonthlyBreakdown.reduce((s, m) => s + m.ebitda, 0);
+        const isProfit = fyNetProfit >= 0;
+        return (
+          <div className={`${card} mb-6 border-l-4 ${isProfit ? 'border-l-[#059669]' : 'border-l-red-400'}`}>
+            <p className="text-white font-semibold mb-3">{fy.label} Full Year P&amp;L Summary</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-[#5A7A95] text-xs">Total GP (Full Year)</p>
+                <p className="text-white font-bold text-lg">{money(fyTotalGP)}</p>
+              </div>
+              <div>
+                <p className="text-[#5A7A95] text-xs">Total Costs (Full Year)</p>
+                <p className="text-red-400 font-bold text-lg">{money(fyTotalCost)}</p>
+              </div>
+              <div>
+                <p className="text-[#5A7A95] text-xs">Net Profit / Loss</p>
+                <p className={`font-bold text-xl ${isProfit ? 'text-[#059669]' : 'text-red-400'}`}>{money(fyNetProfit)}</p>
+              </div>
+              <div>
+                <p className="text-[#5A7A95] text-xs">EBITDA (Full Year)</p>
+                <p className={`font-bold text-lg ${fyEBITDA >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(fyEBITDA)}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <SubHeader>Closed Won Only</SubHeader>
       <InsightCard accent="#8b5cf6">
         <p className="text-white font-semibold mb-2">End of {fy.label} (Closed Won)</p>
