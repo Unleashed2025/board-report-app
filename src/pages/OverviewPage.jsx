@@ -266,9 +266,10 @@ export default function OverviewPage() {
   const closedThisMonth = cwEnriched.filter(d => d._close && d._close.year * 12 + d._close.month === fy.currentYM);
 
   /* ─── 2. Current FY Closed Won ─── */
-  const cwClosedThisFY = cwEnriched.filter(d => inFY(d._close, fy.start));
+  // Only deals that actually BILL within this FY (not just closed this FY)
   const cwBillingNow = cwEnriched.filter(d => d._bill && ymInt(d._bill) <= fy.currentYM);
   const cwDueThisFY = cwEnriched.filter(d => d._bill && ymInt(d._bill) > fy.currentYM && inFY(d._bill, fy.start));
+  const cwImpactingThisFY = [...cwBillingNow, ...cwDueThisFY];
 
   /* ─── 3. End of FY Position ─── */
   // All recurring CW deals that will be billing by end of Oct (current FY end)
@@ -384,9 +385,9 @@ export default function OverviewPage() {
           <p className="text-[#5A7A95] text-[10px] mt-1">Total: {money(closedWon.reduce((s, d) => s + d.profit, 0))} GP</p>
         </div>
         <div className={card}>
-          <p className="text-[#5A7A95] text-xs mb-1">Closed Won This FY</p>
-          <p className="text-2xl font-bold text-[#059669]">{cwClosedThisFY.length}</p>
-          <p className="text-[#5A7A95] text-[10px] mt-1">GP: {money(cwClosedThisFY.reduce((s, d) => s + d.profit, 0))}</p>
+          <p className="text-[#5A7A95] text-xs mb-1">Billing This FY</p>
+           <p className="text-2xl font-bold text-[#059669]">{cwImpactingThisFY.length}</p>
+           <p className="text-[#5A7A95] text-[10px] mt-1">GP: {money(cwImpactingThisFY.reduce((s, d) => s + d.profit, 0))}</p>
         </div>
         <div className={card}>
           <p className="text-[#5A7A95] text-xs mb-1">Currently Billing</p>
@@ -416,10 +417,10 @@ export default function OverviewPage() {
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title={`Closed Won \u2013 ${fy.label}`}
-        subtitle={`All closed won deals impacting the current financial year (Nov ${fy.start} \u2013 Oct ${fy.start + 1})`}
+        subtitle={`Closed won deals billing within this financial year (Nov ${fy.start} \u2013 Oct ${fy.start + 1})`}
         accent="#059669"
       />
-      <KPICards summary={summarise(cwClosedThisFY)} accent="#059669" />
+      <KPICards summary={summarise(cwImpactingThisFY)} accent="#059669" />
 
       <SubHeader>Currently Billing ({cwBillingNow.length} deals)</SubHeader>
       <DealTable deals={cwBillingNow} />
