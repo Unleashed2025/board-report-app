@@ -683,87 +683,120 @@ export default function OverviewPage() {
 
       {/* 6. New FY Financial Forecast - GP vs Costs */}
       {(() => {
-        const allNewFYDeals = [...newFYNewDeals, ...newFYPipeline];
-        const allNewFYSummary = summarise(allNewFYDeals);
+        // Split deals by certainty
+        const cwDeals = newFYNewDeals; // Closed Won - secured
+        const negDeals = newFYPipeline.filter(d => d.stage === 'Negotiating');
+        const quotDeals = newFYPipeline.filter(d => d.stage === 'Quoting');
+        const earlyDeals = newFYPipeline.filter(d => ['Qualified', 'Lead', 'To Be Contacted'].includes(d.stage));
 
-        // R78 calculation: how many months each deal bills within the FY
-        // FY runs Nov (newStart) to Oct (newStart+1). A deal billing from month X gets remaining months.
-        const fyStartYM = fy.newStart * 12 + 10; // Nov of new FY start year
-        const fyEndYMNew = (fy.newStart + 1) * 12 + 9; // Oct of new FY end year
-        const calcR78Months = (deal) => {
-          const bp = deal._bill || parseMonth(deal.billingStart);
-          if (!bp) return 12; // assume full year if unknown
-          const dealYM = bp.year * 12 + bp.month;
-          if (dealYM <= fyStartYM) return 12; // already billing before FY start = full year
-          const remaining = fyEndYMNew - dealYM + 1;
-          return Math.max(0, Math.min(12, remaining));
-        };
+        // Recurring base (carrying forward from current FY)
+        const baseMonthlyGP = newFYCombinedBaseSummary.monthlyGP;
+        const baseAnnualGP = baseMonthlyGP * 12;
 
-        // Recurring base (carrying forward) = full 12 months
-        const baseR78GP = newFYCombinedBaseSummary.monthlyGP * 12;
-        // New FY deals get R78-weighted months
-        const newDealsR78GP = allNewFYDeals
-          .filter(d => d.dealType === 'Recurring')
-          .reduce((s, d) => s + d.profit * calcR78Months(d), 0);
-        const totalRecR78GP = baseR78GP + newDealsR78GP;
-        // NR GP (one-time, counted in full)
-        const totalNewFYNRGP = allNewFYSummary.nrGP;
-        // Total FY GP
-        const totalFYGP = totalRecR78GP + totalNewFYNRGP;
+        // GP by stage
+        const cwSummary = summarise(cwDeals);
+        const negSummary = summarise(negDeals);
+        const quotSummary = summarise(quotDeals);
+        const earlySummary = summarise(earlyDeals);
 
-        // New FY costs - use the actual cost from the spreadsheet for end of new FY
+        // Actual total FY costs from spreadsheet (sum of each month)
+        const md = boardPlan.monthlyData || [];
+        const newFYMonthlyData = md.filter(m => {
+          const p = parseMonth(m.month);
+          return p && inFY(p, fy.newStart);
+        });
+        const totalFYCosts = newFYMonthlyData.reduce((s, m) => s + m.totalCost, 0);
+        const avgMonthlyCost = newFYMonthlyData.length > 0 ? Math.round(totalFYCosts / newFYMonthlyData.length) : 0;
+
+        // New hire cost info
         const newHires = (boardPlan.newHireCosts || []).filter(h => {
           const p = parseMonth(h.startMonth);
           return p && inFY(p, fy.newStart);
         });
-        const newFYEndCost = (() => {
-          const md = boardPlan.monthlyData || [];
-          // Find Oct of new FY end year (fy.newStart + 1)
-          const octEntry = md.find(m => {
-            const p = parseMonth(m.month);
-            return p && p.month === 9 && p.year === fy.newStart + 1; // Oct = month 9
-          });
-          return octEntry ? octEntry.totalCost : (md[md.length - 1]?.totalCost || 0);
-        })();
-        const newFYMonthlyCosts = newFYEndCost;
-        const totalFYCosts = newFYMonthlyCosts * 12;
+        const newFYMonthlyCosts = newFYMonthlyData.length > 0 ? newFYMonthlyData[newFYMonthlyData.length - 1].totalCost : 0;
+
+        // Total GP by certainty level
+        const securedGP = baseAnnualGP + cwSummary.monthlyGP * 12 + cwSummary.nrGP;
+        const likelyGP = negSummary.monthlyGP * 12 + negSummary.nrGP;
+        const possibleGP = (quotSummary.monthlyGP + earlySummary.monthlyGP) * 12 + quotSummary.nrGP + earlySummary.nrGP;
+        const totalGP = securedGP + likelyGP + possibleGP;
+        const totalNewFYNRGP = cwSummary.nrGP + negSummary.nrGP + quotSummary.nrGP + earlySummary.nrGP;
 
         return (
           <>
             <SubHeader>New FY Financial Forecast - GP vs Costs</SubHeader>
+            <p className="text-[#5A7A95] text-[10px] mb-4 italic">
+              {fy.newLabel} forecast broken down by deal certainty. Shows what GP is already secured vs what depends on closing pipeline deals. Costs reflect actual monthly figures from the business plan including new hires ramping in.
+            </p>
             <InsightCard accent="#f59e0b">
-              <p className="text-white font-semibold mb-3">{fy.newLabel} Forecast (R78-Weighted)</p>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm mb-4">
-                <div>
-                  <p className="text-[#5A7A95] text-xs">Recurring Base (12 months)</p>
-                  <p className="text-white font-bold">{money(baseR78GP)}</p>
-                  <p className="text-[#5A7A95] text-[10px]">{newFYCombinedBaseSummary.recCount} deal(s) × 12mo @ {money(newFYCombinedBaseSummary.monthlyGP)}/mo</p>
+              <p className="text-white font-semibold mb-4">{fy.newLabel} GP Forecast by Certainty</p>
+
+              {/* Secured */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-3 h-3 rounded-full bg-[#059669]"></span>
+                  <p className="text-[#059669] font-semibold text-sm">Secured (Closed Won + Recurring Base)</p>
+                  <p className="text-[#059669] font-bold ml-auto">{money(securedGP)}</p>
                 </div>
-                <div>
-                  <p className="text-[#5A7A95] text-xs">New Deals Recurring (R78)</p>
-                  <p className="text-[#f59e0b] font-bold">{money(newDealsR78GP)}</p>
-                  <p className="text-[#5A7A95] text-[10px]">{allNewFYDeals.filter(d => d.dealType === 'Recurring').length} deal(s) weighted by billing start</p>
-                </div>
-                <div>
-                  <p className="text-[#5A7A95] text-xs">NR GP (Project Work)</p>
-                  <p className="text-amber-400 font-bold">{money(totalNewFYNRGP)}</p>
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                  <div>Recurring base: {money(baseAnnualGP)} ({money(baseMonthlyGP)}/mo x 12)</div>
+                  <div>CW recurring: {money(cwSummary.monthlyGP * 12)} ({cwDeals.filter(d => d.dealType === 'Recurring').length} deals)</div>
+                  <div>CW project/NR: {money(cwSummary.nrGP)}</div>
                 </div>
               </div>
-              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-3 gap-4 text-sm">
+
+              {/* Likely */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-3 h-3 rounded-full bg-[#f59e0b]"></span>
+                  <p className="text-[#f59e0b] font-semibold text-sm">Likely (Negotiating)</p>
+                  <p className="text-[#f59e0b] font-bold ml-auto">{money(likelyGP)}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                  <div>Recurring: {money(negSummary.monthlyGP * 12)} ({negDeals.filter(d => d.dealType === 'Recurring').length} deals)</div>
+                  <div>NR/Project: {money(negSummary.nrGP)}</div>
+                  <div>{negDeals.length} deal(s) total</div>
+                </div>
+              </div>
+
+              {/* Possible */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-3 h-3 rounded-full bg-[#0EA5E9]"></span>
+                  <p className="text-[#0EA5E9] font-semibold text-sm">Possible (Quoting + Qualified/Lead)</p>
+                  <p className="text-[#0EA5E9] font-bold ml-auto">{money(possibleGP)}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                  <div>Recurring: {money((quotSummary.monthlyGP + earlySummary.monthlyGP) * 12)}</div>
+                  <div>NR/Project: {money(quotSummary.nrGP + earlySummary.nrGP)}</div>
+                  <div>{quotDeals.length + earlyDeals.length} deal(s) total</div>
+                </div>
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Total FY GP (Pipeline)</p>
-                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalFYGP)}</p>
+                  <p className="text-[#5A7A95] text-xs">Total FY GP (All Stages)</p>
+                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalGP)}</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Total FY Costs</p>
+                  <p className="text-[#5A7A95] text-xs">Total FY Costs (Actual)</p>
                   <p className="text-red-400 font-bold text-lg">{money(totalFYCosts)}</p>
-                  <p className="text-[#5A7A95] text-[10px]">{money(newFYMonthlyCosts)}/mo × 12</p>
+                  <p className="text-[#5A7A95] text-[10px]">Avg {money(avgMonthlyCost)}/mo (ramps from {money(newFYMonthlyData[0]?.totalCost || 0)} to {money(newFYMonthlyCosts)})</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">FY Net P&amp;L</p>
-                  <p className={`font-bold text-lg ${totalFYGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
-                    {money(totalFYGP - totalFYCosts)}
+                  <p className="text-[#5A7A95] text-xs">Best Case P&amp;L</p>
+                  <p className={`font-bold text-lg ${totalGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(totalGP - totalFYCosts)}
                   </p>
+                  <p className="text-[#5A7A95] text-[10px]">If all pipeline closes</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Secured Only P&amp;L</p>
+                  <p className={`font-bold text-lg ${securedGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(securedGP - totalFYCosts)}
+                  </p>
+                  <p className="text-[#5A7A95] text-[10px]">Without closing any more deals</p>
                 </div>
               </div>
             </InsightCard>
