@@ -278,7 +278,17 @@ export default function OverviewPage() {
   const endFYNR = cwEnriched.filter(d => d.dealType !== 'Recurring' && inFY(d._bill, fy.start));
   const endFYAll = [...endFYRecurring, ...endFYNR];
   const endFYSummary = summarise(endFYAll);
-  const monthlyCosts = boardPlan.monthlyData?.[boardPlan.monthlyData.length - 1]?.totalCost || 0;
+  // Monthly costs - use cost for the last month of current FY (Oct), not the last month in the spreadsheet
+  const currentFYEndCost = (() => {
+    const md = boardPlan.monthlyData || [];
+    // Find Oct of current FY end year (fy.start + 1)
+    const octEntry = md.find(m => {
+      const p = parseMonth(m.month);
+      return p && p.month === 9 && p.year === fy.start + 1; // Oct = month 9
+    });
+    return octEntry ? octEntry.totalCost : (md[md.length - 1]?.totalCost || 0);
+  })();
+  const monthlyCosts = currentFYEndCost;
 
   // FY monthly breakdown (Nov-Oct order) for GP vs Costs table
   const fyMonthOrder = [10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // Nov..Oct
@@ -701,13 +711,21 @@ export default function OverviewPage() {
         // Total FY GP
         const totalFYGP = totalRecR78GP + totalNewFYNRGP;
 
-        // New hire costs for new FY
+        // New FY costs - use the actual cost from the spreadsheet for end of new FY
         const newHires = (boardPlan.newHireCosts || []).filter(h => {
           const p = parseMonth(h.startMonth);
           return p && inFY(p, fy.newStart);
         });
-        const newHireMonthlyCost = newHires.reduce((s, h) => s + h.totalMonthlyCost, 0);
-        const newFYMonthlyCosts = monthlyCosts + newHireMonthlyCost;
+        const newFYEndCost = (() => {
+          const md = boardPlan.monthlyData || [];
+          // Find Oct of new FY end year (fy.newStart + 1)
+          const octEntry = md.find(m => {
+            const p = parseMonth(m.month);
+            return p && p.month === 9 && p.year === fy.newStart + 1; // Oct = month 9
+          });
+          return octEntry ? octEntry.totalCost : (md[md.length - 1]?.totalCost || 0);
+        })();
+        const newFYMonthlyCosts = newFYEndCost;
         const totalFYCosts = newFYMonthlyCosts * 12;
 
         return (
@@ -959,7 +977,23 @@ export default function OverviewPage() {
                 };
               });
 
-              const newFYMonthlyCostsLocal = monthlyCosts + newHires.reduce((s, h) => s + h.totalMonthlyCost, 0);
+              // Get actual monthly costs from spreadsheet for each new FY month
+              const md = boardPlan.monthlyData || [];
+              const getMonthCost = (mi, yr) => {
+                const entry = md.find(m => {
+                  const p = parseMonth(m.month);
+                  return p && p.month === mi && p.year === yr;
+                });
+                return entry ? entry.totalCost : newFYMonthlyCosts;
+              };
+
+              // Add actual costs per month to monthRows
+              const monthRowsWithCosts = monthRows.map(mr => {
+                const cost = getMonthCost(mr.mi, mr.yr);
+                return { ...mr, monthlyCost: cost };
+              });
+
+              const newFYMonthlyCostsLocal = newFYMonthlyCosts; // end-of-FY rate for summary
 
               const monthTable = (
                 <div className={`${card} mt-4 mb-6`}>
@@ -981,8 +1015,8 @@ export default function OverviewPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {monthRows.map((mr, i) => {
-                        const net = mr.totalMonthlyWithNR - newFYMonthlyCostsLocal;
+                      {monthRowsWithCosts.map((mr, i) => {
+                        const net = mr.totalMonthlyWithNR - mr.monthlyCost;
                         return (
                           <tr key={i} className={`border-b border-[#2A4A6F]/40 ${net >= 0 ? 'bg-[#059669]/10' : ''}`}>
                             <td className="py-1 text-white text-xs">{mr.label}</td>
@@ -990,7 +1024,7 @@ export default function OverviewPage() {
                             <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.pipelineRecGP > 0 ? money(mr.pipelineRecGP) : '-'}</td>
                             <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.pipelineNRGP > 0 ? money(mr.pipelineNRGP) : '-'}</td>
                             <td className="py-1 text-right font-mono text-xs text-white font-bold">{money(mr.totalMonthlyWithNR)}</td>
-                            <td className="py-1 text-right font-mono text-xs text-red-400">{money(newFYMonthlyCostsLocal)}</td>
+                            <td className="py-1 text-right font-mono text-xs text-red-400">{money(mr.monthlyCost)}</td>
                             <td className={`py-1 text-right font-mono text-xs font-bold ${net >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(net)}</td>
                           </tr>
                         );
@@ -999,20 +1033,20 @@ export default function OverviewPage() {
                     <tfoot>
                       <tr className="border-t border-[#2A4A6F] text-white font-semibold text-xs">
                         <td className="py-2">FY Total</td>
-                        <td className="py-2 text-right font-mono text-[#0EA5E9]">{money(monthRows.reduce((s, m) => s + m.baseRecGP, 0))}</td>
-                        <td className="py-2 text-right font-mono text-[#f59e0b]">{money(monthRows.reduce((s, m) => s + m.pipelineRecGP, 0))}</td>
-                        <td className="py-2 text-right font-mono text-amber-400">{money(monthRows.reduce((s, m) => s + m.pipelineNRGP, 0))}</td>
-                        <td className="py-2 text-right font-mono">{money(monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0))}</td>
-                        <td className="py-2 text-right font-mono text-red-400">{money(newFYMonthlyCostsLocal * 12)}</td>
-                        <td className={`py-2 text-right font-mono font-bold ${monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0) - newFYMonthlyCostsLocal * 12 >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
-                          {money(monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0) - newFYMonthlyCostsLocal * 12)}
+                        <td className="py-2 text-right font-mono text-[#0EA5E9]">{money(monthRowsWithCosts.reduce((s, m) => s + m.baseRecGP, 0))}</td>
+                        <td className="py-2 text-right font-mono text-[#f59e0b]">{money(monthRowsWithCosts.reduce((s, m) => s + m.pipelineRecGP, 0))}</td>
+                        <td className="py-2 text-right font-mono text-amber-400">{money(monthRowsWithCosts.reduce((s, m) => s + m.pipelineNRGP, 0))}</td>
+                        <td className="py-2 text-right font-mono">{money(monthRowsWithCosts.reduce((s, m) => s + m.totalMonthlyWithNR, 0))}</td>
+                        <td className="py-2 text-right font-mono text-red-400">{money(monthRowsWithCosts.reduce((s, m) => s + m.monthlyCost, 0))}</td>
+                        <td className={`py-2 text-right font-mono font-bold ${monthRowsWithCosts.reduce((s, m) => s + m.totalMonthlyWithNR, 0) - monthRowsWithCosts.reduce((s2, m2) => s2 + m2.monthlyCost, 0) >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
+                          {money(monthRowsWithCosts.reduce((s, m) => s + m.totalMonthlyWithNR, 0) - monthRowsWithCosts.reduce((s2, m2) => s2 + m2.monthlyCost, 0))}
                         </td>
                       </tr>
                     </tfoot>
                   </table>
                   </div>
                   {(() => {
-                    const breakEvenMonth = monthRows.find(mr => mr.totalMonthlyWithNR >= newFYMonthlyCostsLocal);
+                    const breakEvenMonth = monthRowsWithCosts.find(mr => mr.totalMonthlyWithNR >= mr.monthlyCost);
                     return breakEvenMonth ? (
                       <p className="text-[#059669] text-xs mt-3 font-semibold">
                         ✓ Monthly GP exceeds costs from: {breakEvenMonth.label}
@@ -1026,14 +1060,14 @@ export default function OverviewPage() {
                 </div>
               );
 
-              const lastMonth = monthRows[monthRows.length - 1];
+              const lastMonth = monthRowsWithCosts[monthRowsWithCosts.length - 1];
               const endOfFYMonthlyGP = lastMonth.totalMonthlyGP;
               const endOfFYMonthlyWithNR = lastMonth.totalMonthlyWithNR;
-              const totalFYGPEarned = monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0);
-              const totalFYCostsAll = newFYMonthlyCostsLocal * 12;
+              const totalFYGPEarned = monthRowsWithCosts.reduce((s, m) => s + m.totalMonthlyWithNR, 0);
+              const totalFYCostsAll = monthRowsWithCosts.reduce((s, m) => s + m.monthlyCost, 0);
               const fyNetPL = totalFYGPEarned - totalFYCostsAll;
-              const endOfFYSurplus = endOfFYMonthlyWithNR - newFYMonthlyCostsLocal;
-              const totalNRContrib = monthRows.reduce((s, m) => s + m.pipelineNRGP, 0) + totalNewFYNRGP;
+              const endOfFYSurplus = endOfFYMonthlyWithNR - lastMonth.monthlyCost;
+              const totalNRContrib = monthRowsWithCosts.reduce((s, m) => s + m.pipelineNRGP, 0) + totalNewFYNRGP;
 
               const summaryCard = (
                 <div className={`${card} mt-6 mb-6 border-l-4 ${fyNetPL >= 0 ? 'border-l-[#059669]' : 'border-l-red-400'}`}>
@@ -1051,7 +1085,7 @@ export default function OverviewPage() {
                     <div className="text-center">
                       <p className="text-[#5A7A95] text-xs mb-1">Total FY Costs</p>
                       <p className="text-red-400 font-bold text-xl">{money(totalFYCostsAll)}</p>
-                      <p className="text-[#5A7A95] text-[10px]">{money(newFYMonthlyCostsLocal)}/mo × 12</p>
+                      <p className="text-[#5A7A95] text-[10px]">Sum of actual monthly costs</p>
                     </div>
                     <div className="text-center">
                       <p className="text-[#5A7A95] text-xs mb-1">FY Net Profit / Loss</p>
@@ -1080,7 +1114,7 @@ export default function OverviewPage() {
                       </div>
                       <div className="text-center">
                         <p className="text-[#5A7A95] text-xs mb-1">Monthly Costs</p>
-                        <p className="text-red-400 font-bold text-lg">{money(newFYMonthlyCostsLocal)}</p>
+                        <p className="text-red-400 font-bold text-lg">{money(lastMonth.monthlyCost)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-[#5A7A95] text-xs mb-1">Monthly Surplus / Gap</p>
@@ -1094,10 +1128,11 @@ export default function OverviewPage() {
                 </div>
               );
 
-              // Dec cashflow note (c.£90k engineering GP landing in Dec)
-              const decNRGP = monthRows.find(m => m.mi === 11); // Dec
+              // Dec cashflow note (c.90k engineering GP landing in Dec)
+              const decNRGP = monthRowsWithCosts.find(m => m.mi === 11); // Dec
               const decCashflow = decNRGP ? decNRGP.pipelineNRGP : 90000;
-              const monthsOfCoverage = newFYMonthlyCostsLocal > 0 ? Math.floor(decCashflow / newFYMonthlyCostsLocal) : 0;
+              const avgMonthlyCost = Math.round(totalFYCostsAll / 12);
+              const monthsOfCoverage = avgMonthlyCost > 0 ? Math.floor(decCashflow / avgMonthlyCost) : 0;
 
               const cashflowNote = decCashflow > 50000 ? (
                 <div className={`${card} mt-4 mb-6 border-l-4 border-l-[#0EA5E9]`}>
@@ -1105,7 +1140,7 @@ export default function OverviewPage() {
                   <p className="text-[#5A7A95] text-xs">
                     Circa <span className="text-[#0EA5E9] font-bold">{money(decCashflow)}</span> of non-recurring project GP lands in December,
                     which covers the cost vs GP gap for approximately <span className="text-[#0EA5E9] font-bold">{monthsOfCoverage} months</span> of
-                    operating costs ({money(newFYMonthlyCostsLocal)}/mo). This provides a significant cash buffer while recurring revenue builds through the new FY.
+                    operating costs ({money(avgMonthlyCost)}/mo avg). This provides a significant cash buffer while recurring revenue builds through the new FY.
                   </p>
                 </div>
               ) : null;
