@@ -948,10 +948,31 @@ export default function OverviewPage() {
                 fyMonths.push({ mi, yr, label: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mi]} ${yr}` });
               }
 
-              // Base recurring GP (existing pipeline, flat per month)
+              // Base recurring GP (existing deals already billing, carry forward every month)
               const baseRecGP = newFYCombinedBaseSummary.monthlyGP;
               // New hire contribution starts from Jan (month index 2 in our array: Nov=0, Dec=1, Jan=2)
               const hireStartIdx = 2; // Jan is 3rd month of FY
+
+              // All pipeline deals for new FY: CW + Negotiating + Quoting + Qualified/Lead
+              const allPipelineDeals = [...newFYNewDeals, ...newFYPipeline];
+
+              // For each deal, determine which FY month index it starts billing
+              const dealsByFYMonthIdx = allPipelineDeals.map(d => {
+                const bp = d._bill || parseMonth(d.billingStart);
+                if (!bp) return { ...d, fyIdx: 0 }; // assume Nov start if unknown
+                // Convert to FY month index: Nov=0, Dec=1, Jan=2 ... Oct=11
+                const dealMI = bp.month; // 0=Jan...11=Dec
+                const dealYr = bp.year;
+                // FY starts Nov of fy.newStart
+                let fyIdx;
+                if (dealMI >= 10) { // Nov or Dec
+                  fyIdx = dealMI - 10 + (dealYr === fy.newStart ? 0 : 12);
+                } else { // Jan-Oct
+                  fyIdx = dealMI + 2 + (dealYr === fy.newStart + 1 ? 0 : (dealYr > fy.newStart + 1 ? 12 : -12));
+                }
+                fyIdx = Math.max(0, Math.min(11, fyIdx));
+                return { ...d, fyIdx };
+              });
 
               let alyshaRunning = 0;
               let leadGenRunning = 0;
@@ -959,17 +980,30 @@ export default function OverviewPage() {
               const monthRows = fyMonths.map((fm, idx) => {
                 const isHireActive = idx >= hireStartIdx;
                 if (isHireActive) {
-                  alyshaRunning += 1000; // adds £1k recurring each month
+                  alyshaRunning += 1000;
                   leadGenRunning += 300;
                 }
                 const hireRecGP = alyshaRunning + leadGenRunning;
-                const hireNRGP = isHireActive ? (5000 + 2000) : 0; // £7k NR/mo when active
-                const totalMonthlyGP = baseRecGP + hireRecGP;
-                const totalMonthlyWithNR = totalMonthlyGP + hireNRGP;
+                const hireNRGP = isHireActive ? (5000 + 2000) : 0;
+
+                // Pipeline deals: recurring GP from deals billing on or before this month
+                const activeDeals = dealsByFYMonthIdx.filter(d => d.fyIdx <= idx);
+                const pipelineRecGP = activeDeals
+                  .filter(d => d.dealType === 'Recurring')
+                  .reduce((s, d) => s + d.profit, 0);
+                // NR GP: one-time in the month the deal starts billing
+                const pipelineNRGP = dealsByFYMonthIdx
+                  .filter(d => d.fyIdx === idx && d.dealType !== 'Recurring')
+                  .reduce((s, d) => s + d.profit, 0);
+
+                const totalMonthlyGP = baseRecGP + pipelineRecGP + hireRecGP;
+                const totalMonthlyWithNR = totalMonthlyGP + hireNRGP + pipelineNRGP;
 
                 return {
                   ...fm,
                   baseRecGP,
+                  pipelineRecGP,
+                  pipelineNRGP,
                   hireRecGP,
                   hireNRGP,
                   totalMonthlyGP,
@@ -981,17 +1015,20 @@ export default function OverviewPage() {
 
               const monthTable = (
                 <div className={`${card} mt-4 mb-6`}>
-                  <p className="text-white font-semibold mb-1 text-sm">{fy.newLabel} Monthly Forecast (incl. New Hire GP)</p>
+                  <p className="text-white font-semibold mb-1 text-sm">{fy.newLabel} Monthly Forecast (All Deals + New Hire GP)</p>
                   <p className="text-[#5A7A95] text-[10px] mb-3">
-                    Existing recurring base + cumulative new hire GP growth from Jan {fy.newStart + 1}. Shows when monthly GP exceeds costs.
+                    Base recurring + pipeline deals (CW, Negotiation, Quoting, Qualified/Lead) layered in by billing start month + cumulative new hire GP from Jan {fy.newStart + 1}.
                   </p>
+                  <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-[#5A7A95] text-xs border-b border-[#2A4A6F]">
                         <th className="text-left py-1">Month</th>
-                        <th className="text-right py-1">Base Rec GP</th>
+                        <th className="text-right py-1">Base Rec</th>
+                        <th className="text-right py-1">Pipeline Rec</th>
+                        <th className="text-right py-1">Pipeline NR</th>
                         <th className="text-right py-1">New Hire Rec</th>
-                        <th className="text-right py-1">NR GP</th>
+                        <th className="text-right py-1">Hire NR</th>
                         <th className="text-right py-1">Total GP</th>
                         <th className="text-right py-1">Costs</th>
                         <th className="text-right py-1">Net</th>
@@ -1004,6 +1041,8 @@ export default function OverviewPage() {
                           <tr key={i} className={`border-b border-[#2A4A6F]/40 ${net >= 0 ? 'bg-[#059669]/10' : ''}`}>
                             <td className="py-1 text-white text-xs">{mr.label}</td>
                             <td className="py-1 text-right font-mono text-xs text-[#0EA5E9]">{money(mr.baseRecGP)}</td>
+                            <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.pipelineRecGP > 0 ? money(mr.pipelineRecGP) : '\u2013'}</td>
+                            <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.pipelineNRGP > 0 ? money(mr.pipelineNRGP) : '\u2013'}</td>
                             <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.hireRecGP > 0 ? money(mr.hireRecGP) : '\u2013'}</td>
                             <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.hireNRGP > 0 ? money(mr.hireNRGP) : '\u2013'}</td>
                             <td className="py-1 text-right font-mono text-xs text-white font-bold">{money(mr.totalMonthlyWithNR)}</td>
@@ -1017,6 +1056,8 @@ export default function OverviewPage() {
                       <tr className="border-t border-[#2A4A6F] text-white font-semibold text-xs">
                         <td className="py-2">FY Total</td>
                         <td className="py-2 text-right font-mono text-[#0EA5E9]">{money(monthRows.reduce((s, m) => s + m.baseRecGP, 0))}</td>
+                        <td className="py-2 text-right font-mono text-[#f59e0b]">{money(monthRows.reduce((s, m) => s + m.pipelineRecGP, 0))}</td>
+                        <td className="py-2 text-right font-mono text-amber-400">{money(monthRows.reduce((s, m) => s + m.pipelineNRGP, 0))}</td>
                         <td className="py-2 text-right font-mono text-[#f59e0b]">{money(monthRows.reduce((s, m) => s + m.hireRecGP, 0))}</td>
                         <td className="py-2 text-right font-mono text-amber-400">{money(monthRows.reduce((s, m) => s + m.hireNRGP, 0))}</td>
                         <td className="py-2 text-right font-mono">{money(monthRows.reduce((s, m) => s + m.totalMonthlyWithNR, 0))}</td>
@@ -1027,6 +1068,7 @@ export default function OverviewPage() {
                       </tr>
                     </tfoot>
                   </table>
+                  </div>
                   {(() => {
                     const breakEvenMonth = monthRows.find(mr => mr.totalMonthlyWithNR >= newFYMonthlyCostsLocal);
                     return breakEvenMonth ? (
