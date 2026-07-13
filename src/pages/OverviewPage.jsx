@@ -617,6 +617,15 @@ export default function OverviewPage() {
         const totalNewFYMonthlyGP = newFYCombinedBaseSummary.monthlyGP + allNewFYSummary.monthlyGP;
         const totalNewFYMonthlyRev = newFYCombinedBaseSummary.monthlyRev + allNewFYSummary.monthlyRev;
         const totalNewFYNRGP = allNewFYSummary.nrGP;
+
+        // New hire costs for new FY
+        const newHires = (boardPlan.newHireCosts || []).filter(h => {
+          const p = parseMonth(h.startMonth);
+          return p && inFY(p, fy.newStart);
+        });
+        const newHireMonthlyCost = newHires.reduce((s, h) => s + h.totalMonthlyCost, 0);
+        const newFYMonthlyCosts = monthlyCosts + newHireMonthlyCost;
+
         return (
           <>
             <SubHeader>New FY Financial Forecast \u2013 GP vs Costs</SubHeader>
@@ -648,17 +657,60 @@ export default function OverviewPage() {
                   <p className="text-[#f59e0b] font-bold text-lg">{money(totalNewFYMonthlyGP)}</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Monthly Costs</p>
-                  <p className="text-white font-bold text-lg">{money(monthlyCosts)}</p>
+                  <p className="text-[#5A7A95] text-xs">Monthly Costs (incl. new hires)</p>
+                  <p className="text-white font-bold text-lg">{money(newFYMonthlyCosts)}</p>
+                  {newHireMonthlyCost > 0 && (
+                    <p className="text-[#5A7A95] text-[10px]">Current: {money(monthlyCosts)} + New hires: {money(newHireMonthlyCost)}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-[#5A7A95] text-xs">Forecast Surplus / Gap</p>
-                  <p className={`font-bold text-lg ${totalNewFYMonthlyGP >= monthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
-                    {money(totalNewFYMonthlyGP - monthlyCosts)}
+                  <p className={`font-bold text-lg ${totalNewFYMonthlyGP >= newFYMonthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(totalNewFYMonthlyGP - newFYMonthlyCosts)}
                   </p>
                 </div>
               </div>
             </InsightCard>
+
+            {/* New Hire Cost Breakdown */}
+            {newHires.length > 0 && (
+              <div className={`${card} mt-4 mb-6`}>
+                <p className="text-white font-semibold mb-3 text-sm">Planned New Hires \u2013 {fy.newLabel}</p>
+                <p className="text-[#5A7A95] text-[10px] mb-3">Employer NI calculated at 15% above £5,000 threshold. No car allowance.</p>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-[#5A7A95] text-xs border-b border-[#2A4A6F]">
+                      <th className="text-left py-2">Role</th>
+                      <th className="text-right py-2">Annual Salary</th>
+                      <th className="text-right py-2">Monthly Salary</th>
+                      <th className="text-right py-2">Monthly NI</th>
+                      <th className="text-right py-2">Total Monthly</th>
+                      <th className="text-right py-2">Start</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {newHires.map((h, i) => (
+                      <tr key={i} className="border-b border-[#2A4A6F]/40">
+                        <td className="py-2 text-white">{h.name}</td>
+                        <td className="py-2 text-right font-mono text-white">{money(h.annualSalary)}</td>
+                        <td className="py-2 text-right font-mono text-white">{money(h.monthlySalary)}</td>
+                        <td className="py-2 text-right font-mono text-amber-400">{money(h.monthlyNI)}</td>
+                        <td className="py-2 text-right font-mono text-red-400">{money(h.totalMonthlyCost)}</td>
+                        <td className="py-2 text-right text-[#5A7A95]">{h.startMonth}</td>
+                      </tr>
+                    ))}
+                    <tr className="font-bold">
+                      <td className="py-2 text-white">Total New Hire Cost</td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td className="py-2 text-right font-mono text-red-400">{money(newHireMonthlyCost)}/mo</td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         );
       })()}
