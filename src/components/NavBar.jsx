@@ -2,7 +2,6 @@ import { NavLink, Link } from 'react-router-dom';
 
 const links = [
   { to: '/overview', label: 'Board Dashboard' },
-  { to: '/pipeline', label: 'Pipeline (Rep View)' },
 ];
 
 export default function NavBar() {

@@ -10,6 +10,8 @@ const SESSION_KEY = 'overview_auth';
 const card = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-5';
 const fmt = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
 const money = (v) => fmt.format(v);
+const TAB_CURRENT = 'current';
+const TAB_NEW = 'new';
 
 /* â”€â”€â”€ Date / FY helpers â”€â”€â”€ */
 
@@ -201,6 +203,7 @@ export default function OverviewPage() {
   const [authenticated, setAuthenticated] = useState(() => sessionStorage.getItem(SESSION_KEY) === 'true');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState(TAB_CURRENT);
   const { boardPlan, dataLoaded, updateFromExcel, lastUpdated, sourceFilename } = useData();
   const fileRef = useRef(null);
 
@@ -381,10 +384,12 @@ export default function OverviewPage() {
   return (
     <Layout>
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Board Sales Dashboard</h1>
-          <p className="text-[#5A7A95] text-sm">{fy.label} &middot; Nov {fy.start} &ndash; Oct {fy.start + 1}</p>
+          <p className="text-[#5A7A95] text-sm">
+            {activeTab === TAB_CURRENT ? `${fy.label} - Nov ${fy.start} to Oct ${fy.start + 1}` : `${fy.newLabel} - Nov ${fy.newStart} to Oct ${fy.newStart + 1}`}
+          </p>
           {lastUpdated && (
             <p className="text-[#5A7A95] text-[10px] mt-1">
               Data: {sourceFilename} &middot; Uploaded {lastUpdated.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -413,6 +418,27 @@ export default function OverviewPage() {
           </button>
         </div>
       </div>
+
+      {/* ── FY Tab Switcher ── */}
+      <div className="flex gap-2 mb-8 border-b border-[#2A4A6F] pb-3">
+        <button
+          onClick={() => setActiveTab(TAB_CURRENT)}
+          className={`px-5 py-2 text-sm font-semibold rounded-lg transition-colors ${activeTab === TAB_CURRENT ? 'bg-[#0EA5E9]/10 text-[#0EA5E9] border border-[#0EA5E9]' : 'text-[#5A7A95] hover:text-white border border-transparent'}`}
+        >
+          Current FY ({fy.label})
+        </button>
+        <button
+          onClick={() => setActiveTab(TAB_NEW)}
+          className={`px-5 py-2 text-sm font-semibold rounded-lg transition-colors ${activeTab === TAB_NEW ? 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]' : 'text-[#5A7A95] hover:text-white border border-transparent'}`}
+        >
+          New FY ({fy.newLabel})
+        </button>
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════
+          CURRENT FY TAB
+         ════════════════════════════════════════════════════════════════ */}
+      {activeTab === TAB_CURRENT && (<>
 
       {/* ── Top-level summary cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
@@ -644,6 +670,46 @@ export default function OverviewPage() {
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      </>)}
+
+      {/* ════════════════════════════════════════════════════════════════
+          NEW FY TAB
+         ════════════════════════════════════════════════════════════════ */}
+      {activeTab === TAB_NEW && (<>
+
+      {/* ── Starting Position (carried from end of Current FY) ── */}
+      <div className={`${card} mb-8 border-l-4 border-l-[#f59e0b]`}>
+        <p className="text-white font-semibold mb-3">Starting Position - Carried from {fy.label}</p>
+        <p className="text-[#5A7A95] text-xs mb-4 italic">
+          Monthly recurring GP and costs at the end of {fy.label} (Oct {fy.start + 1}) that carry forward into {fy.newLabel}.
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
+            <p className="text-[#059669] font-bold text-lg">{money(endFYSummary.monthlyGP)}</p>
+            <p className="text-[#5A7A95] text-[10px]">{endFYSummary.recCount} recurring deal(s)</p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Costs (Oct {fy.start + 1})</p>
+            <p className="text-red-400 font-bold text-lg">{money(monthlyCosts)}</p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Surplus / Gap</p>
+            <p className={`font-bold text-lg ${endFYSummary.monthlyGP >= monthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+              {money(endFYSummary.monthlyGP - monthlyCosts)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">New Hires Joining</p>
+            <div className="text-[#5A7A95] text-[10px] mt-1">
+              {(boardPlan.newHireCosts || []).filter(h => { const p = parseMonth(h.startMonth); return p && inFY(p, fy.newStart); }).map((h, i) => (
+                <p key={i}>{h.name} - {h.startMonth}</p>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════════
@@ -1210,6 +1276,8 @@ export default function OverviewPage() {
           </>
         );
       })()}
+
+      </>)}
 
       {/* ── Footer ── */}
       <div className="border-t border-[#2A4A6F] mt-10 pt-6 text-center">
