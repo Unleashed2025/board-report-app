@@ -12,7 +12,9 @@ export function DataProvider({ children }) {
   const [sourceFilename, setSourceFilename] = useState('');
 
   const updateFromExcel = useCallback((workbook, filename = '') => {
+    console.log('[DataContext] updateFromExcel called with:', filename, 'sheets:', workbook.SheetNames);
     const nextData = parseExcel(workbook);
+    console.log('[DataContext] parsed data:', nextData.boardPlan ? 'boardPlan found' : 'NO boardPlan', 'deals:', nextData.boardPlan?.closedWonDeals?.length, 'neg:', nextData.boardPlan?.negotiatingDeals?.length);
     const { boardPlan: plan, ...salesData } = nextData;
     setData(salesData);
     setBoardPlan(plan || null);
