@@ -1012,7 +1012,7 @@ function BoardPlanDashboard({ boardPlan }) {
               const negRecGPm = negRec.reduce((s, d) => s + d.profit, 0);
               const totalRecRev = cwRecRev + negRecRev;
               const totalRecGP = cwRecGP + negRecGPm;
-              const monthlyCost = totalCostTotal / 12;
+              const monthlyCost = monthlyData[monthlyData.length - 1]?.totalCost || totalCostTotal / 12;
               const cwMonthlyGap = cwRecGP - monthlyCost;
               const forecastMonthlyGap = totalRecGP - monthlyCost;
 
@@ -1041,9 +1041,9 @@ function BoardPlanDashboard({ boardPlan }) {
                   </div>
                   <div className="rounded-xl border-2 border-[#ef4444] bg-[#ef4444]/5 p-4">
                     <p className="text-[10px] text-[#ef4444] font-semibold uppercase tracking-wide mb-2">Monthly Costs</p>
-                    <p className="text-xs text-[#A0B4C8]">From Figures Sheet</p>
+                    <p className="text-xs text-[#A0B4C8]">Year-End Run Rate</p>
                     <p className="text-lg font-bold text-[#ef4444]">{money(monthlyCost)}<span className="text-xs text-[#5A7A95]">/mo</span></p>
-                    <p className="text-xs text-[#A0B4C8] mt-1">Annual</p>
+                    <p className="text-xs text-[#A0B4C8] mt-1">Annual Total</p>
                     <p className="text-lg font-bold text-[#ef4444]">{money(totalCostTotal)}</p>
                   </div>
                 </div>

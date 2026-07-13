@@ -32,7 +32,11 @@ export function parseBoardPlan(workbook) {
 
   // Validate structure: row 0 should mention "Business Plan"
   const firstCell = String(rows[0]?.[0] || '');
-  if (!firstCell.includes('Business Plan') && !firstCell.includes('Clean 2026')) return null;
+  console.log('[parseExcel] Figures sheet:', figuresSheet, '| Tracker sheet:', trackerSheet, '| First cell:', firstCell, '| Sheet names:', workbook.SheetNames.join(', '));
+  if (!firstCell.includes('Business Plan') && !firstCell.includes('Clean 2026') && !firstCell.includes('Board') && !firstCell.includes('Unleashed')) {
+    console.warn('[parseExcel] First cell does not match expected pattern:', firstCell);
+    return null;
+  }
 
   // Row 3 has month headers (Excel serial dates in cols 1-14, col 15 = "Total")
   const monthRow = rows[3] || [];

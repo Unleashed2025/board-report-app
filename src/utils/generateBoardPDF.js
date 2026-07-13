@@ -552,7 +552,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   const negRecMonthlyRev = negRecDeals.reduce((s, d) => s + d.revenue, 0);
   const totalRecMonthlyGP = cwRecMonthlyGP + negRecMonthlyGP;
   const totalRecMonthlyRev = cwRecMonthlyRev + negRecMonthlyRev;
-  const monthlyCostJan = boardPlan.totalCostTotal / 12;
+  const monthlyCostJan = boardPlan.monthlyData[boardPlan.monthlyData.length - 1]?.totalCost || boardPlan.totalCostTotal / 12;
   const cwMonthlyGapJan = cwRecMonthlyGP - monthlyCostJan;
   const forecastMonthlyGapJan = totalRecMonthlyGP - monthlyCostJan;
 
