@@ -276,7 +276,14 @@ export default function OverviewPage() {
     return (
       <Layout>
         <div className="text-center py-20">
-          <p className="text-[#5A7A95] text-lg">Upload your Board Business Plan workbook to view the dashboard.</p>
+          <p className="text-[#5A7A95] text-lg mb-4">Upload your Board Business Plan workbook to view the dashboard.</p>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleReupload} className="hidden" />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="px-6 py-3 rounded-lg bg-[#0EA5E9] text-white text-sm font-semibold hover:bg-[#0EA5E9]/90 transition-colors"
+          >
+            Upload Excel File
+          </button>
         </div>
       </Layout>
     );
