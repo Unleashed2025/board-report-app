@@ -934,8 +934,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     [{ text: 'Monthly Surplus / (Gap)', bold: true }, { text: money(fyGapCW) + '/mo', align: 'right', bold: true, color: fyGapCW >= 0 ? BRAND.green : BRAND.red }, { text: '+' + money(fyNegRecCarryingGP), align: 'right', color: BRAND.amber }, { text: money(fyGapForecast) + '/mo', align: 'right', bold: true, color: fyGapForecast >= 0 ? BRAND.green : BRAND.red }],
     [{ text: 'Annualised Surplus / (Gap)', bold: true }, { text: money(fyGapCW * 12), align: 'right', bold: true, color: fyGapCW >= 0 ? BRAND.green : BRAND.red }, { text: '-', align: 'right' }, { text: money(fyGapForecast * 12), align: 'right', bold: true, color: fyGapForecast >= 0 ? BRAND.green : BRAND.red }],
   ];
-  drawTable(pdf, fyPosHead, fyPosBody, margin, y, contentW, { headerBg: [13, 35, 56], rowHeight: 7 });
-  y += 7 + fyPosBody.length * 7 + 5;
+  y = drawTable(pdf, y, margin, contentW, fyPosHead, fyPosBody, { headColor: BRAND.navy, colWidths: [55, 35, 35, 40], pageH });
 
   // NR deferred cash
   if (fyNRDeferred.length > 0) {
@@ -947,8 +946,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
       { text: money(d.revenue), align: 'right' }, { text: money(d.profit), align: 'right', color: BRAND.amber }
     ]);
     nrBody.push([{ text: 'Total NR in New FY', bold: true }, '', '', '', { text: money(fyNRDeferredRev), align: 'right', bold: true }, { text: money(fyNRDeferredGP), align: 'right', bold: true, color: BRAND.amber }]);
-    drawTable(pdf, nrHead, nrBody, margin, y, contentW, { headerBg: [13, 35, 56], rowHeight: 6 });
-    y += 7 + nrBody.length * 6 + 5;
+    y = drawTable(pdf, y, margin, contentW, nrHead, nrBody, { headColor: BRAND.navy, colWidths: [30, 35, 25, 22, 28, 28], fontSize: 8, pageH });
   }
 
   // Pipeline summary
@@ -961,8 +959,7 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
     ['Qualified / Lead', { text: String(fyEarly.length), align: 'right' }, { text: money(fyEarly.reduce((s, d) => s + d.revenue, 0)), align: 'right' }, { text: money(fyEarly.reduce((s, d) => s + d.profit, 0)), align: 'right' }],
     [{ text: 'Total Pipeline', bold: true }, { text: String(fyNegAll.length + fyQuoting.length + fyEarly.length), align: 'right', bold: true }, { text: money(fyNegAll.reduce((s, d) => s + d.revenue, 0) + fyQuoting.reduce((s, d) => s + d.revenue, 0) + fyEarly.reduce((s, d) => s + d.revenue, 0)), align: 'right', bold: true }, { text: money(fyNegAll.reduce((s, d) => s + d.profit, 0) + fyQuoting.reduce((s, d) => s + d.profit, 0) + fyEarly.reduce((s, d) => s + d.profit, 0)), align: 'right', bold: true }],
   ];
-  drawTable(pdf, pipeHead, pipeBody, margin, y, contentW, { headerBg: [13, 35, 56], rowHeight: 7 });
-  y += 7 + pipeBody.length * 7 + 5;
+  y = drawTable(pdf, y, margin, contentW, pipeHead, pipeBody, { headColor: BRAND.navy, colWidths: [55, 25, 45, 40], pageH });
 
   // FY narrative
   ensureSpace(20);
