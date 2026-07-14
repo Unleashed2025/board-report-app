@@ -108,17 +108,23 @@ function drawTable(pdf, startY, margin, contentW, head, body, opts = {}) {
     y += rowHeight + 2;
   }
 
-  return y + 2;
+  return y + 8;
 }
 
 // -- Narrative Analysis Engine ------------------------------------------------
 
 function analyseData(boardPlan, r78Data) {
-  const {
-    closedWonDeals, negotiatingDeals, quotingDeals, earlyStageDeals,
-    totalGPTotal, totalCostTotal, netProfitTotal,
-    mdfTotal, monthlyData, gpByServiceType, employeeCosts,
-  } = boardPlan;
+  const closedWonDeals = boardPlan.closedWonDeals || [];
+  const negotiatingDeals = boardPlan.negotiatingDeals || [];
+  const quotingDeals = boardPlan.quotingDeals || [];
+  const earlyStageDeals = boardPlan.earlyStageDeals || [];
+  const totalGPTotal = boardPlan.totalGPTotal || 0;
+  const totalCostTotal = boardPlan.totalCostTotal || 0;
+  const netProfitTotal = boardPlan.netProfitTotal || 0;
+  const mdfTotal = boardPlan.mdfTotal || 0;
+  const monthlyData = boardPlan.monthlyData || [];
+  const gpByServiceType = boardPlan.gpByServiceType || [];
+  const employeeCosts = boardPlan.employeeCosts || [];
 
   const allDeals = [...closedWonDeals, ...negotiatingDeals, ...quotingDeals, ...earlyStageDeals];
   const pipelineDeals = [...negotiatingDeals, ...quotingDeals, ...earlyStageDeals];
@@ -308,6 +314,27 @@ function analyseData(boardPlan, r78Data) {
 // -- PDF Generator ------------------------------------------------------------
 
 export async function generateBoardPDF(boardPlan, r78Data = {}) {
+  try {
+    // Normalize boardPlan with safe defaults
+    boardPlan = boardPlan || {};
+    boardPlan.closedWonDeals = boardPlan.closedWonDeals || [];
+    boardPlan.negotiatingDeals = boardPlan.negotiatingDeals || [];
+    boardPlan.quotingDeals = boardPlan.quotingDeals || [];
+    boardPlan.earlyStageDeals = boardPlan.earlyStageDeals || [];
+    boardPlan.monthlyData = boardPlan.monthlyData || [];
+    boardPlan.costBreakdown = boardPlan.costBreakdown || [];
+    boardPlan.gpByServiceType = boardPlan.gpByServiceType || [];
+    boardPlan.employeeCosts = boardPlan.employeeCosts || [];
+    boardPlan.totalGPTotal = boardPlan.totalGPTotal || 0;
+    boardPlan.totalCostTotal = boardPlan.totalCostTotal || 0;
+    boardPlan.netProfitTotal = boardPlan.netProfitTotal || 0;
+    boardPlan.mdfTotal = boardPlan.mdfTotal || 0;
+    boardPlan.closedRecurringGP = boardPlan.closedRecurringGP || 0;
+    boardPlan.closedNonRecurringGP = boardPlan.closedNonRecurringGP || 0;
+    boardPlan.grossProfitTotal = boardPlan.grossProfitTotal || 0;
+    boardPlan.ebitdaTotal = boardPlan.ebitdaTotal || 0;
+    boardPlan.cumulativeEBITDAFinal = boardPlan.cumulativeEBITDAFinal || 0;
+
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW = 210, pageH = 297, margin = 15;
   const contentW = pageW - margin * 2;
@@ -320,7 +347,8 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   const ensureSpace = (n) => { if (y + n > pageH - 20) { pdf.addPage(); y = margin; } };
 
   const heading = (title, sub) => {
-    ensureSpace(20);
+    ensureSpace(28);
+    y += 6;
     pdf.setFontSize(14); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...BRAND.accent);
     pdf.text(title, margin, y);
     y += 2;
@@ -1076,4 +1104,8 @@ export async function generateBoardPDF(boardPlan, r78Data = {}) {
   const filename = `Unleashed-Board-Sales-Report-${new Date().toISOString().split('T')[0]}.pdf`;
   pdf.save(filename);
   return filename;
+  } catch (err) {
+    console.error('[BoardPDF] Generation failed:', err);
+    throw err;
+  }
 }

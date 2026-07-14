@@ -122,7 +122,7 @@ function drawFootRow(pdf, y, margin, head, footRow, widths, opts = {}) {
     }
     x += widths[idx];
   });
-  return y + rowHeight + 2;
+  return y + rowHeight + 6;
 }
 
 function drawTable(pdf, startY, margin, contentW, head, body, opts = {}) {
@@ -195,7 +195,7 @@ function drawTable(pdf, startY, margin, contentW, head, body, opts = {}) {
     y = drawFootRow(pdf, y, margin, head, footRow, widths, { headColor, fontSize, rowHeight });
   }
 
-  return y + 2;
+  return y + 8;
 }
 
 function prepareNewFYData(boardPlan) {
@@ -438,12 +438,13 @@ export async function generateNewFYPDF(boardPlan, r78Data = {}) {
   };
 
   const heading = (title, subtitle) => {
-    ensureSpace(18);
+    ensureSpace(28);
+    y += 6;
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
     pdf.setTextColor(...BRAND.accent);
     pdf.text(title, margin, y);
-    y += 2;
+    y += 3;
     pdf.setDrawColor(...BRAND.accent);
     pdf.setLineWidth(0.8);
     pdf.line(margin, y, margin + contentW, y);
@@ -454,12 +455,12 @@ export async function generateNewFYPDF(boardPlan, r78Data = {}) {
       pdf.setTextColor(...BRAND.muted);
       const lines = pdf.splitTextToSize(subtitle, contentW);
       pdf.text(lines, margin, y);
-      y += lines.length * 4 + 2;
+      y += lines.length * 4 + 4;
     }
   };
 
   const bullet = (text, color) => {
-    ensureSpace(12);
+    ensureSpace(14);
     pdf.setFillColor(...color);
     pdf.circle(margin + 2, y - 1.2, 1.4, 'F');
     pdf.setFontSize(8.8);
@@ -467,7 +468,7 @@ export async function generateNewFYPDF(boardPlan, r78Data = {}) {
     pdf.setTextColor(60, 60, 60);
     const lines = pdf.splitTextToSize(text, contentW - 9);
     pdf.text(lines, margin + 6, y);
-    y += lines.length * 4 + 1;
+    y += lines.length * 4 + 4;
   };
 
   const trendCard = (card) => {
@@ -481,7 +482,7 @@ export async function generateNewFYPDF(boardPlan, r78Data = {}) {
     const color = palette[card.type] || BRAND.accent;
     const lines = pdf.splitTextToSize(card.text, contentW - 14);
     const height = 8 + lines.length * 4 + 4;
-    ensureSpace(height + 2);
+    ensureSpace(height + 6);
     pdf.setFillColor(...color);
     pdf.roundedRect(margin, y - 2, 2.5, height, 1, 1, 'F');
     pdf.setFontSize(9.5);
@@ -493,7 +494,7 @@ export async function generateNewFYPDF(boardPlan, r78Data = {}) {
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(60, 60, 60);
     pdf.text(lines, margin + 6, y);
-    y += lines.length * 4 + 4;
+    y += lines.length * 4 + 8;
   };
 
   const stageCounts = {
