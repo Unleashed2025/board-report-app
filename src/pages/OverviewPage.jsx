@@ -1271,21 +1271,186 @@ export default function OverviewPage() {
               // Dec cashflow note (c.90k engineering GP landing in Dec)
               const decNRGP = monthRowsWithCosts.find(m => m.mi === 11); // Dec
               const decCashflow = decNRGP ? decNRGP.pipelineNRGP : 90000;
-              const avgMonthlyCost = Math.round(totalFYCostsAll / 12);
-              const monthsOfCoverage = avgMonthlyCost > 0 ? Math.floor(decCashflow / avgMonthlyCost) : 0;
 
-              const cashflowNote = decCashflow > 50000 ? (
-                <div className={`${card} mt-4 mb-6 border-l-4 border-l-[#0EA5E9]`}>
-                  <p className="text-white font-semibold text-sm mb-2">Cashflow Note - December {fy.newStart}</p>
-                  <p className="text-[#5A7A95] text-xs">
-                    Circa <span className="text-[#0EA5E9] font-bold">{money(decCashflow)}</span> of non-recurring project GP lands in December,
-                    which covers the cost vs GP gap for approximately <span className="text-[#0EA5E9] font-bold">{monthsOfCoverage} months</span> of
-                    operating costs ({money(avgMonthlyCost)}/mo avg). This provides a significant cash buffer while recurring revenue builds through the new FY.
+              // ── Cashflow Runway Section ──
+              // Build month-by-month cash position starting from Nov
+              // NR GP (like the £90k in Dec) creates a cash buffer
+              // Each month: cash += (recurring GP - costs) + any NR GP that month
+              // Shows when cash runs out and how much new business is needed
+              const cashflowRows = [];
+              let cashBalance = 0;
+              let cashRunsOutMonth = null;
+              let peakCash = 0;
+              let peakCashMonth = '';
+
+              // Scenario 1: With current pipeline (all deals)
+              for (let i = 0; i < monthRowsWithCosts.length; i++) {
+                const mr = monthRowsWithCosts[i];
+                const recGP = mr.baseRecGP + mr.pipelineRecGP;
+                const nrGP = mr.pipelineNRGP;
+                const costs = mr.monthlyCost;
+                const monthlyNet = recGP + nrGP - costs;
+                cashBalance += monthlyNet;
+
+                if (cashBalance > peakCash) {
+                  peakCash = cashBalance;
+                  peakCashMonth = mr.label;
+                }
+
+                cashflowRows.push({
+                  label: mr.label,
+                  recGP,
+                  nrGP,
+                  costs,
+                  monthlyNet,
+                  cashBalance,
+                  newDeals: mr.newDeals || [],
+                });
+
+                if (cashBalance < 0 && !cashRunsOutMonth) {
+                  cashRunsOutMonth = mr.label;
+                }
+              }
+
+              // Scenario 2: Secured only (no pipeline, just base recurring + CW)
+              const securedCashRows = [];
+              let securedCashBalance = 0;
+              let securedRunsOutMonth = null;
+              const cwRecOnly = summarise(newFYNewDeals.filter(d => d.dealType === 'Recurring')).monthlyGP;
+              const cwNRDeals = newFYNewDeals.filter(d => d.dealType !== 'Recurring');
+
+              for (let i = 0; i < monthRowsWithCosts.length; i++) {
+                const mr = monthRowsWithCosts[i];
+                // Only secured: base rec + CW recurring (layered by billing month)
+                const cwActiveRec = dealsByFYMonthIdx
+                  .filter(d => d.stage === 'Closed-Won' && d.dealType === 'Recurring' && d.fyIdx <= i)
+                  .reduce((s, d) => s + d.profit, 0);
+                const cwNR = dealsByFYMonthIdx
+                  .filter(d => d.stage === 'Closed-Won' && d.dealType !== 'Recurring' && d.fyIdx === i)
+                  .reduce((s, d) => s + d.profit, 0);
+                const recGP = baseRecGP + cwActiveRec;
+                const costs = mr.monthlyCost;
+                const monthlyNet = recGP + cwNR - costs;
+                securedCashBalance += monthlyNet;
+                securedCashRows.push({ label: mr.label, recGP, nrGP: cwNR, costs, monthlyNet, cashBalance: securedCashBalance });
+                if (securedCashBalance < 0 && !securedRunsOutMonth) {
+                  securedRunsOutMonth = mr.label;
+                }
+              }
+
+              // Calculate monthly GP gap needed to break even (secured only)
+              const lastSecured = securedCashRows[securedCashRows.length - 1];
+              const securedEndBalance = lastSecured.cashBalance;
+              const monthsInDeficit = securedCashRows.filter(r => r.cashBalance < 0).length;
+              const additionalMonthlyGPNeeded = securedEndBalance < 0 ? Math.ceil(Math.abs(securedEndBalance) / 12) : 0;
+
+              const cashflowSection = (
+                <div className={`${card} mt-6 mb-6 border-l-4 border-l-[#0EA5E9]`}>
+                  <p className="text-white font-semibold mb-1 text-sm">💰 Cashflow Runway - {fy.newLabel}</p>
+                  <p className="text-[#5A7A95] text-[10px] mb-4 italic">
+                    Cumulative cash position month-by-month. NR GP (e.g. {money(decCashflow)} in Dec) creates a buffer that offsets the gap between recurring GP and costs.
+                    Shows when the buffer runs out and how much new business must be billing to stay positive.
                   </p>
-                </div>
-              ) : null;
 
-              return <>{monthTable}{summaryCard}{cashflowNote}</>;
+                  {/* Key metrics */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">Dec NR Cash Injection</p>
+                      <p className="text-[#0EA5E9] font-bold text-lg">{money(decCashflow)}</p>
+                      <p className="text-[#5A7A95] text-[10px]">Project GP landing in Dec</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">Peak Cash Position</p>
+                      <p className="text-[#059669] font-bold text-lg">{money(peakCash)}</p>
+                      <p className="text-[#5A7A95] text-[10px]">{peakCashMonth}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">End of FY Cash</p>
+                      <p className={`font-bold text-lg ${cashflowRows[cashflowRows.length - 1].cashBalance >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
+                        {money(cashflowRows[cashflowRows.length - 1].cashBalance)}
+                      </p>
+                      <p className="text-[#5A7A95] text-[10px]">With all pipeline</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[#5A7A95] text-xs mb-1">Secured Only End Cash</p>
+                      <p className={`font-bold text-lg ${securedEndBalance >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
+                        {money(securedEndBalance)}
+                      </p>
+                      <p className="text-[#5A7A95] text-[10px]">{securedRunsOutMonth ? `Goes negative: ${securedRunsOutMonth}` : 'Stays positive all FY'}</p>
+                    </div>
+                  </div>
+
+                  {/* Month-by-month cashflow table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-[#5A7A95] text-xs border-b border-[#2A4A6F]">
+                          <th className="text-left py-1">Month</th>
+                          <th className="text-right py-1">Recurring GP</th>
+                          <th className="text-right py-1">NR GP</th>
+                          <th className="text-right py-1">Costs</th>
+                          <th className="text-right py-1">Monthly Net</th>
+                          <th className="text-right py-1">Cash Balance</th>
+                          <th className="text-right py-1">Secured Only</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cashflowRows.map((cr, i) => {
+                          const isNegative = cr.cashBalance < 0;
+                          const securedNeg = securedCashRows[i].cashBalance < 0;
+                          return (
+                            <React.Fragment key={i}>
+                              <tr className={`border-b border-[#2A4A6F]/40 ${isNegative ? 'bg-red-900/10' : cr.nrGP > 0 ? 'bg-[#0EA5E9]/5' : ''}`}>
+                                <td className="py-1 text-white text-xs">{cr.label}</td>
+                                <td className="py-1 text-right font-mono text-xs text-[#059669]">{money(cr.recGP)}</td>
+                                <td className="py-1 text-right font-mono text-xs text-[#0EA5E9]">{cr.nrGP > 0 ? money(cr.nrGP) : '-'}</td>
+                                <td className="py-1 text-right font-mono text-xs text-red-400">{money(cr.costs)}</td>
+                                <td className={`py-1 text-right font-mono text-xs font-bold ${cr.monthlyNet >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(cr.monthlyNet)}</td>
+                                <td className={`py-1 text-right font-mono text-xs font-bold ${isNegative ? 'text-red-400' : 'text-[#059669]'}`}>{money(cr.cashBalance)}</td>
+                                <td className={`py-1 text-right font-mono text-xs ${securedNeg ? 'text-red-400' : 'text-[#059669]'}`}>{money(securedCashRows[i].cashBalance)}</td>
+                              </tr>
+                              {cr.newDeals.length > 0 && cr.newDeals.map((d, j) => (
+                                <tr key={`cf-deal-${i}-${j}`} className="bg-[#1A2A3F]/50">
+                                  <td colSpan={2} className="py-0.5 pl-4 text-[10px] text-[#5A7A95] truncate">↳ {d.customer}</td>
+                                  <td className="py-0.5 text-right text-[10px] font-mono text-[#5A7A95]">{d.dealType !== 'Recurring' ? money(d.profit) : '-'}</td>
+                                  <td colSpan={2} className="py-0.5 text-right text-[10px] text-[#5A7A95]">{d.dealType === 'Recurring' ? money(d.profit) + '/mo rec' : 'one-off'}</td>
+                                  <td className="py-0.5 text-right text-[10px] text-[#5A7A95]">{d.stage}</td>
+                                  <td></td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Analysis callouts */}
+                  <div className="mt-4 space-y-2">
+                    {cashRunsOutMonth ? (
+                      <p className="text-red-400 text-xs font-semibold">
+                        ⚠ Cash goes negative in {cashRunsOutMonth} with full pipeline. Need to accelerate deal closures or billing start dates before this point.
+                      </p>
+                    ) : (
+                      <p className="text-[#059669] text-xs font-semibold">
+                        ✓ Cash stays positive all FY with full pipeline. The {money(decCashflow)} Dec injection covers the early-FY gap while recurring builds.
+                      </p>
+                    )}
+                    {securedRunsOutMonth && (
+                      <p className="text-amber-400 text-xs font-semibold">
+                        ⚠ Without pipeline: cash goes negative in {securedRunsOutMonth}. Need {money(additionalMonthlyGPNeeded)}/mo additional recurring GP to break even by end of FY.
+                      </p>
+                    )}
+                    {!securedRunsOutMonth && securedEndBalance >= 0 && (
+                      <p className="text-[#059669] text-xs font-semibold">
+                        ✓ Even without closing any pipeline deals, secured revenue covers costs all FY.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+
+              return <>{monthTable}{summaryCard}{cashflowSection}</>;
             })()}
           </>
         );
