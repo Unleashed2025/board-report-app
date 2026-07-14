@@ -762,6 +762,7 @@ export default function OverviewPage() {
           const p = parseMonth(h.startMonth);
           return p && inFY(p, fy.newStart);
         });
+        const newHireMonthlyCost = newHires.reduce((s, h) => s + (h.totalMonthlyCost || 0), 0);
         const newFYMonthlyCosts = newFYMonthlyData.length > 0 ? newFYMonthlyData[newFYMonthlyData.length - 1].totalCost : 0;
 
         // Total GP by certainty level
@@ -787,11 +788,26 @@ export default function OverviewPage() {
                   <p className="text-[#059669] font-semibold text-sm">Secured (Closed Won + Recurring Base)</p>
                   <p className="text-[#059669] font-bold ml-auto">{money(securedGP)}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5 mb-2">
                   <div>Recurring base: {money(baseAnnualGP)} ({money(baseMonthlyGP)}/mo x 12)</div>
                   <div>CW recurring: {money(cwSummary.monthlyGP * 12)} ({cwDeals.filter(d => d.dealType === 'Recurring').length} deals)</div>
                   <div>CW project/NR: {money(cwSummary.nrGP)}</div>
                 </div>
+                {cwDeals.length > 0 && (
+                  <div className="pl-5 mt-1">
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        {cwDeals.map((d, i) => (
+                          <tr key={i} className="border-b border-[#2A4A6F]/20">
+                            <td className="py-0.5 text-white/70 truncate max-w-[200px]">{d.customer}</td>
+                            <td className="py-0.5 text-right text-[#5A7A95]">{d.dealType}</td>
+                            <td className="py-0.5 text-right font-mono text-[#059669]">{money(d.profit)}{d.dealType === 'Recurring' ? '/mo' : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Likely */}
@@ -801,11 +817,26 @@ export default function OverviewPage() {
                   <p className="text-[#f59e0b] font-semibold text-sm">Likely (Negotiating)</p>
                   <p className="text-[#f59e0b] font-bold ml-auto">{money(likelyGP)}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5 mb-2">
                   <div>Recurring: {money(negSummary.monthlyGP * 12)} ({negDeals.filter(d => d.dealType === 'Recurring').length} deals)</div>
                   <div>NR/Project: {money(negSummary.nrGP)}</div>
                   <div>{negDeals.length} deal(s) total</div>
                 </div>
+                {negDeals.length > 0 && (
+                  <div className="pl-5 mt-1">
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        {negDeals.map((d, i) => (
+                          <tr key={i} className="border-b border-[#2A4A6F]/20">
+                            <td className="py-0.5 text-white/70 truncate max-w-[200px]">{d.customer}</td>
+                            <td className="py-0.5 text-right text-[#5A7A95]">{d.dealType}</td>
+                            <td className="py-0.5 text-right font-mono text-[#f59e0b]">{money(d.profit)}{d.dealType === 'Recurring' ? '/mo' : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Possible */}
@@ -815,11 +846,26 @@ export default function OverviewPage() {
                   <p className="text-[#0EA5E9] font-semibold text-sm">Possible (Quoting + Qualified/Lead)</p>
                   <p className="text-[#0EA5E9] font-bold ml-auto">{money(possibleGP)}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5 mb-2">
                   <div>Recurring: {money((quotSummary.monthlyGP + earlySummary.monthlyGP) * 12)}</div>
                   <div>NR/Project: {money(quotSummary.nrGP + earlySummary.nrGP)}</div>
                   <div>{quotDeals.length + earlyDeals.length} deal(s) total</div>
                 </div>
+                {(quotDeals.length + earlyDeals.length) > 0 && (
+                  <div className="pl-5 mt-1">
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        {[...quotDeals, ...earlyDeals].map((d, i) => (
+                          <tr key={i} className="border-b border-[#2A4A6F]/20">
+                            <td className="py-0.5 text-white/70 truncate max-w-[200px]">{d.customer}</td>
+                            <td className="py-0.5 text-right text-[#5A7A95]">{d.stage}</td>
+                            <td className="py-0.5 text-right font-mono text-[#0EA5E9]">{money(d.profit)}{d.dealType === 'Recurring' ? '/mo' : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Totals */}
@@ -1070,9 +1116,10 @@ export default function OverviewPage() {
               };
 
               // Add actual costs per month to monthRows
-              const monthRowsWithCosts = monthRows.map(mr => {
+              const monthRowsWithCosts = monthRows.map((mr, idx) => {
                 const cost = getMonthCost(mr.mi, mr.yr);
-                return { ...mr, monthlyCost: cost };
+                const newDeals = dealsByFYMonthIdx.filter(d => d.fyIdx === idx);
+                return { ...mr, monthlyCost: cost, newDeals };
               });
 
               const newFYMonthlyCostsLocal = newFYMonthlyCosts; // end-of-FY rate for summary
@@ -1089,7 +1136,7 @@ export default function OverviewPage() {
                       <tr className="text-[#5A7A95] text-xs border-b border-[#2A4A6F]">
                         <th className="text-left py-1">Month</th>
                         <th className="text-right py-1">Base Rec</th>
-                        <th className="text-right py-1">Pipeline Rec</th>
+                        <th className="text-right py-1">Pipeline Recurring</th>
                         <th className="text-right py-1">Pipeline NR</th>
                         <th className="text-right py-1">Total GP</th>
                         <th className="text-right py-1">Costs</th>
@@ -1100,15 +1147,26 @@ export default function OverviewPage() {
                       {monthRowsWithCosts.map((mr, i) => {
                         const net = mr.totalMonthlyWithNR - mr.monthlyCost;
                         return (
-                          <tr key={i} className={`border-b border-[#2A4A6F]/40 ${net >= 0 ? 'bg-[#059669]/10' : ''}`}>
-                            <td className="py-1 text-white text-xs">{mr.label}</td>
-                            <td className="py-1 text-right font-mono text-xs text-[#0EA5E9]">{money(mr.baseRecGP)}</td>
-                            <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.pipelineRecGP > 0 ? money(mr.pipelineRecGP) : '-'}</td>
-                            <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.pipelineNRGP > 0 ? money(mr.pipelineNRGP) : '-'}</td>
-                            <td className="py-1 text-right font-mono text-xs text-white font-bold">{money(mr.totalMonthlyWithNR)}</td>
-                            <td className="py-1 text-right font-mono text-xs text-red-400">{money(mr.monthlyCost)}</td>
-                            <td className={`py-1 text-right font-mono text-xs font-bold ${net >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(net)}</td>
-                          </tr>
+                          <React.Fragment key={i}>
+                            <tr className={`border-b border-[#2A4A6F]/40 ${net >= 0 ? 'bg-[#059669]/10' : ''}`}>
+                              <td className="py-1 text-white text-xs">{mr.label}</td>
+                              <td className="py-1 text-right font-mono text-xs text-[#0EA5E9]">{money(mr.baseRecGP)}</td>
+                              <td className="py-1 text-right font-mono text-xs text-[#f59e0b]">{mr.pipelineRecGP > 0 ? money(mr.pipelineRecGP) : '-'}</td>
+                              <td className="py-1 text-right font-mono text-xs text-amber-400">{mr.pipelineNRGP > 0 ? money(mr.pipelineNRGP) : '-'}</td>
+                              <td className="py-1 text-right font-mono text-xs text-white font-bold">{money(mr.totalMonthlyWithNR)}</td>
+                              <td className="py-1 text-right font-mono text-xs text-red-400">{money(mr.monthlyCost)}</td>
+                              <td className={`py-1 text-right font-mono text-xs font-bold ${net >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(net)}</td>
+                            </tr>
+                            {mr.newDeals.length > 0 && mr.newDeals.map((d, j) => (
+                              <tr key={`deal-${i}-${j}`} className="bg-[#1A2A3F]/50">
+                                <td colSpan={2} className="py-0.5 pl-4 text-[10px] text-[#5A7A95] truncate">↳ {d.customer}</td>
+                                <td className="py-0.5 text-right text-[10px] font-mono text-[#5A7A95]">{d.dealType === 'Recurring' ? money(d.profit) + '/mo' : '-'}</td>
+                                <td className="py-0.5 text-right text-[10px] font-mono text-[#5A7A95]">{d.dealType !== 'Recurring' ? money(d.profit) : '-'}</td>
+                                <td className="py-0.5 text-right text-[10px] text-[#5A7A95]">{d.stage}</td>
+                                <td colSpan={2}></td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
                         );
                       })}
                     </tbody>
@@ -1149,7 +1207,7 @@ export default function OverviewPage() {
               const totalFYCostsAll = monthRowsWithCosts.reduce((s, m) => s + m.monthlyCost, 0);
               const fyNetPL = totalFYGPEarned - totalFYCostsAll;
               const endOfFYSurplus = endOfFYMonthlyWithNR - lastMonth.monthlyCost;
-              const totalNRContrib = monthRowsWithCosts.reduce((s, m) => s + m.pipelineNRGP, 0) + totalNewFYNRGP;
+              const totalNRContrib = monthRowsWithCosts.reduce((s, m) => s + m.pipelineNRGP, 0);
 
               const summaryCard = (
                 <div className={`${card} mt-6 mb-6 border-l-4 ${fyNetPL >= 0 ? 'border-l-[#059669]' : 'border-l-red-400'}`}>
@@ -1273,6 +1331,37 @@ export default function OverviewPage() {
         });
         const totalFYCostsActual = newFYMonthlyData.reduce((s, m) => s + m.totalCost, 0);
 
+        // Compute main forecast GP to show combined total with Alysha
+        const allPipelineDealsAlysha = [...newFYNewDeals, ...newFYPipeline];
+        const baseRecGPAlysha = newFYCombinedBaseSummary.monthlyGP;
+        const mainForecastGP = (() => {
+          const fyM = [];
+          for (let m = 0; m < 12; m++) {
+            const mi = (10 + m) % 12;
+            const yr = mi >= 10 ? fy.newStart : fy.newStart + 1;
+            fyM.push({ mi, yr });
+          }
+          const dealsByIdx = allPipelineDealsAlysha.map(d => {
+            const bp = d._bill || parseMonth(d.billingStart);
+            if (!bp) return { ...d, fyIdx: 0 };
+            const dealMI = bp.month;
+            const dealYr = bp.year;
+            let fyIdx;
+            if (dealMI >= 10) fyIdx = dealMI - 10 + (dealYr === fy.newStart ? 0 : 12);
+            else fyIdx = dealMI + 2 + (dealYr === fy.newStart + 1 ? 0 : (dealYr > fy.newStart + 1 ? 12 : -12));
+            fyIdx = Math.max(0, Math.min(11, fyIdx));
+            return { ...d, fyIdx };
+          });
+          let total = 0;
+          for (let idx = 0; idx < 12; idx++) {
+            const activeDeals = dealsByIdx.filter(d => d.fyIdx <= idx);
+            const pRec = activeDeals.filter(d => d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
+            const pNR = dealsByIdx.filter(d => d.fyIdx === idx && d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+            total += baseRecGPAlysha + pRec + pNR;
+          }
+          return total;
+        })();
+
         return (
           <div className="mt-12 border-t-2 border-dashed border-[#f59e0b]/40 pt-8">
             <SectionHeader
@@ -1360,12 +1449,31 @@ export default function OverviewPage() {
               <p className="text-[#5A7A95] text-[10px] mb-4 italic">
                 Shows what the FY figures look like with Alysha's contribution added on top of the main forecast.
               </p>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 text-sm">
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Additional FY GP (Alysha)</p>
+                  <p className="text-[#5A7A95] text-xs">Main Forecast GP</p>
+                  <p className="text-[#f59e0b] font-bold text-lg">{money(mainForecastGP)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">From main forecast above</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">+ Alysha GP</p>
                   <p className="text-[#a855f7] font-bold text-lg">+{money(totalAlyshaGP)}</p>
                   <p className="text-[#5A7A95] text-[10px]">R78 {money(r78Total)} + NR {money(totalNRGP)}</p>
                 </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Total Combined GP</p>
+                  <p className="text-white font-bold text-xl">{money(mainForecastGP + totalAlyshaGP)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">All sources combined</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Combined P&amp;L</p>
+                  <p className={`font-bold text-xl ${(mainForecastGP + totalAlyshaGP - totalFYCostsActual) >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(mainForecastGP + totalAlyshaGP - totalFYCostsActual)}
+                  </p>
+                  <p className="text-[#5A7A95] text-[10px]">vs {money(totalFYCostsActual)} costs</p>
+                </div>
+              </div>
+              <div className="border-t border-[#2A4A6F] mt-4 pt-3 grid grid-cols-2 gap-6 text-sm">
                 <div>
                   <p className="text-[#5A7A95] text-xs">Additional Monthly Rec (End of FY)</p>
                   <p className="text-[#059669] font-bold text-lg">+{money(endOfFYMonthlyRec)}/mo</p>

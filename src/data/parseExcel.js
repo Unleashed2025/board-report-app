@@ -283,71 +283,30 @@ export function parseBoardPlan(workbook) {
   // Significant deals (top 5 by profit)
   const significantDeals = [...boardDeals].sort((a, b) => b.profit - a.profit).slice(0, 5);
 
-  // Parse new hire costs (rows 96-105, 0-indexed 95-104)
-  // These are predicted future hires with salary, monthly cost, and start date
-  // NI is calculated at 15% employer rate above £5,000 secondary threshold
+  // Detect new hires from employee cost rows.
+  // Any employee whose salary starts after the first month is a "new hire".
   const EMPLOYER_NI_RATE = 0.15;
   const NI_THRESHOLD = 5000; // annual secondary threshold
   const newHireCosts = [];
-  for (let r = 95; r < 105; r++) {
-    const row = rows[r] || [];
-    const name = String(row[0] || '').trim();
-    // Skip header rows and empty rows
-    if (!name || /new hire/i.test(name) || /cost/i.test(name.toLowerCase()) && name.length < 20) continue;
-    
-    // Scan row for: annual salary (>15000), monthly cost (1000-10000), start date
-    let annualSalary = 0;
-    let monthlySalary = 0;
-    let startMonth = '';
-    
-    for (let c = 1; c <= 15; c++) {
-      const val = row[c];
-      if (val == null) continue;
-      // Date detection (serial or text like "Jan-27")
-      if (!startMonth) {
-        const dateLabel = parseDateToMonthLabel(val);
-        if (dateLabel) { startMonth = dateLabel; continue; }
-        // Handle short date format like "Jan-27" which parseDateToMonthLabel might miss
-        if (typeof val === 'string' && /^[A-Za-z]{3}-\d{2}$/.test(val.trim())) {
-          const parts = val.trim().split('-');
-          const monthStr = parts[0];
-          const yearStr = '20' + parts[1];
-          const d = new Date(monthStr + ' 1 ' + yearStr);
-          if (!isNaN(d.getTime())) {
-            startMonth = d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-            continue;
-          }
-        }
-      }
-      // Numeric detection
-      if (typeof val === 'number' && val > 0) {
-        if (val >= 15000 && !annualSalary) {
-          annualSalary = val;
-        } else if (val >= 1000 && val < 15000 && !monthlySalary) {
-          monthlySalary = val;
-        }
-      }
-    }
-    
-    // If we found a salary but no monthly, derive it
-    if (annualSalary > 0 && !monthlySalary) monthlySalary = annualSalary / 12;
-    // If we found monthly but no annual, derive it
-    if (monthlySalary > 0 && !annualSalary) annualSalary = monthlySalary * 12;
-    
-    if (annualSalary > 0 && startMonth) {
-      const annualNI = Math.round(EMPLOYER_NI_RATE * Math.max(0, annualSalary - NI_THRESHOLD));
-      const monthlyNI = Math.round(annualNI / 12);
-      const totalMonthlyCost = Math.round(monthlySalary + monthlyNI);
-      newHireCosts.push({
-        name,
-        annualSalary,
-        monthlySalary: Math.round(monthlySalary),
-        annualNI,
-        monthlyNI,
-        totalMonthlyCost,
-        startMonth,
-      });
-    }
+  for (const emp of employeeCosts) {
+    // Find the first month with a non-zero salary
+    const firstIdx = emp.monthlyData.findIndex(v => v > 0);
+    if (firstIdx <= 0) continue; // starts from month 0 = existing employee
+    const monthlySalary = emp.monthlyData[firstIdx];
+    const annualSalary = Math.round(monthlySalary * 12);
+    const annualNI = Math.round(EMPLOYER_NI_RATE * Math.max(0, annualSalary - NI_THRESHOLD));
+    const monthlyNI = Math.round(annualNI / 12);
+    const totalMonthlyCost = Math.round(monthlySalary + monthlyNI);
+    const startMonth = months[firstIdx] ? months[firstIdx].label : '';
+    newHireCosts.push({
+      name: emp.name,
+      annualSalary,
+      monthlySalary: Math.round(monthlySalary),
+      annualNI,
+      monthlyNI,
+      totalMonthlyCost,
+      startMonth,
+    });
   }
 
   // Extract the scenario name from row 4
