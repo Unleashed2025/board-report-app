@@ -800,6 +800,7 @@ export default function OverviewPage() {
                         {cwDeals.map((d, i) => (
                           <tr key={i} className="border-b border-[#2A4A6F]/20">
                             <td className="py-0.5 text-white/70 truncate max-w-[200px]">{d.customer}</td>
+                            <td className="py-0.5 text-[#5A7A95] truncate max-w-[150px]">{d.description || '-'}</td>
                             <td className="py-0.5 text-right text-[#5A7A95]">{d.dealType}</td>
                             <td className="py-0.5 text-right font-mono text-[#059669]">{money(d.profit)}{d.dealType === 'Recurring' ? '/mo' : ''}</td>
                           </tr>
@@ -829,6 +830,7 @@ export default function OverviewPage() {
                         {negDeals.map((d, i) => (
                           <tr key={i} className="border-b border-[#2A4A6F]/20">
                             <td className="py-0.5 text-white/70 truncate max-w-[200px]">{d.customer}</td>
+                            <td className="py-0.5 text-[#5A7A95] truncate max-w-[150px]">{d.description || '-'}</td>
                             <td className="py-0.5 text-right text-[#5A7A95]">{d.dealType}</td>
                             <td className="py-0.5 text-right font-mono text-[#f59e0b]">{money(d.profit)}{d.dealType === 'Recurring' ? '/mo' : ''}</td>
                           </tr>
@@ -858,6 +860,7 @@ export default function OverviewPage() {
                         {[...quotDeals, ...earlyDeals].map((d, i) => (
                           <tr key={i} className="border-b border-[#2A4A6F]/20">
                             <td className="py-0.5 text-white/70 truncate max-w-[200px]">{d.customer}</td>
+                            <td className="py-0.5 text-[#5A7A95] truncate max-w-[150px]">{d.description || '-'}</td>
                             <td className="py-0.5 text-right text-[#5A7A95]">{d.stage}</td>
                             <td className="py-0.5 text-right font-mono text-[#0EA5E9]">{money(d.profit)}{d.dealType === 'Recurring' ? '/mo' : ''}</td>
                           </tr>
