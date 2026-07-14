@@ -365,7 +365,22 @@ export default function OverviewPage() {
             Re-upload
           </button>
           <button
-            onClick={() => (activeTab === TAB_NEW ? generateNewFYPDF(boardPlan) : generateBoardPDF(boardPlan))}
+            onClick={() => {
+              console.log('[PDF] Button clicked, activeTab:', activeTab);
+              try {
+                const fn = activeTab === TAB_NEW ? generateNewFYPDF : generateBoardPDF;
+                const result = fn(boardPlan);
+                if (result && typeof result.then === 'function') {
+                  result.then(() => console.log('[PDF] Done')).catch((err) => {
+                    console.error('[PDF] Error:', err);
+                    window.alert('PDF error: ' + (err.message || String(err)));
+                  });
+                }
+              } catch (err) {
+                console.error('[PDF] Sync error:', err);
+                window.alert('PDF error: ' + (err.message || String(err)));
+              }
+            }}
             className="px-5 py-2.5 rounded-lg bg-[#0EA5E9] text-white text-sm font-semibold hover:bg-[#0EA5E9]/90 transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
