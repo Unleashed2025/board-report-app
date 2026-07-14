@@ -399,14 +399,9 @@ export default function OverviewPage() {
       {/* ── Top-level summary cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
         <div className={card}>
-          <p className="text-[#5A7A95] text-xs mb-1">All Closed Won</p>
-          <p className="text-2xl font-bold text-white">{closedWon.length}</p>
-          <p className="text-[#5A7A95] text-[10px] mt-1">Total: {money(closedWon.reduce((s, d) => s + d.profit, 0))} GP</p>
-        </div>
-        <div className={card}>
-          <p className="text-[#5A7A95] text-xs mb-1">Billing This FY</p>
-           <p className="text-2xl font-bold text-[#059669]">{cwImpactingThisFY.length}</p>
-           <p className="text-[#5A7A95] text-[10px] mt-1">GP: {money(cwImpactingThisFY.reduce((s, d) => s + d.profit, 0))}</p>
+          <p className="text-[#5A7A95] text-xs mb-1">Closed Won (Billing This FY)</p>
+          <p className="text-2xl font-bold text-white">{cwImpactingThisFY.length}</p>
+          <p className="text-[#5A7A95] text-[10px] mt-1">GP: {money(summarise(cwImpactingThisFY).monthlyGP)}/mo + {money(summarise(cwImpactingThisFY).nrGP)} NR</p>
         </div>
         <div className={card}>
           <p className="text-[#5A7A95] text-xs mb-1">Currently Billing</p>
@@ -418,21 +413,26 @@ export default function OverviewPage() {
           <p className="text-2xl font-bold text-[#f59e0b]">{cwDueThisFY.length}</p>
           <p className="text-[#5A7A95] text-[10px] mt-1">Monthly GP: {money(summarise(cwDueThisFY).monthlyGP)}</p>
         </div>
+        <div className={card}>
+          <p className="text-[#5A7A95] text-xs mb-1">Monthly Costs</p>
+          <p className="text-2xl font-bold text-red-400">{money(monthlyCosts)}</p>
+          <p className="text-[#5A7A95] text-[10px] mt-1">End of FY rate (Oct {fy.start + 1})</p>
+        </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════════
-          SECTION 1: ALL CLOSED WON (ALL TIME)
+          SECTION 1: ALL CLOSED WON (BILLING THIS FY)
          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
-        title="All Closed Won Deals"
-        subtitle={`${closedWon.length} deals closed won across all time periods  -  regardless of billing start date`}
+        title={`All Closed Won - ${fy.label}`}
+        subtitle={`${cwImpactingThisFY.length} deals billing within this financial year`}
         accent="#0EA5E9"
       />
       <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
-        Total value of every deal we have closed. Includes deals billing now, later this FY, and into the next FY. This is our full closed pipeline.
+        Only deals that are currently billing or will start billing before end of {fy.label}. Deals closed but billing next FY are excluded.
       </p>
-      <KPICards summary={summarise(cwEnriched)} accent="#0EA5E9" />
-      <DealTable deals={cwEnriched} />
+      <KPICards summary={summarise(cwImpactingThisFY)} accent="#0EA5E9" />
+      <DealTable deals={cwImpactingThisFY} fyStart={fy.start} />
 
       {/* ════════════════════════════════════════════════════════════
           SECTION 2: DEALS CLOSED THIS MONTH
