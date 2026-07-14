@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import Layout from '../components/Layout';
 import { useData } from '../data/DataContext.jsx';
 import { generateBoardPDF } from '../utils/generateBoardPDF.js';
+import { generateNewFYPDF } from '../utils/generateNewFYPDF.js';
 
 const CORRECT_PASS = 'IamAseniorLeader!%!';
 const SESSION_KEY = 'overview_auth';
@@ -364,13 +365,13 @@ export default function OverviewPage() {
             Re-upload
           </button>
           <button
-            onClick={() => generateBoardPDF(boardPlan)}
+            onClick={() => (activeTab === TAB_NEW ? generateNewFYPDF(boardPlan) : generateBoardPDF(boardPlan))}
             className="px-5 py-2.5 rounded-lg bg-[#0EA5E9] text-white text-sm font-semibold hover:bg-[#0EA5E9]/90 transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            Export PDF
+            {activeTab === TAB_NEW ? 'Download New FY PDF' : 'Export PDF'}
           </button>
         </div>
       </div>
