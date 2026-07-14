@@ -1457,6 +1457,269 @@ export default function OverviewPage() {
       })()}
 
       {/* ════════════════════════════════════════════════════════════
+          REALISTIC SCENARIO - CW + Negotiating Only
+         ════════════════════════════════════════════════════════════ */}
+      {(() => {
+        // Only Closed Won + Negotiating deals billing in new FY
+        const realisticDeals = [...newFYNewDeals, ...newFYPipeline.filter(d => d.stage === 'Negotiating')];
+        const realisticRec = realisticDeals.filter(d => d.dealType === 'Recurring');
+        const realisticNR = realisticDeals.filter(d => d.dealType !== 'Recurring');
+        const realisticRecGP = realisticRec.reduce((s, d) => s + d.profit, 0);
+        const realisticNRGP = realisticNR.reduce((s, d) => s + d.profit, 0);
+
+        const baseMonthlyGP = newFYCombinedBaseSummary.monthlyGP;
+
+        // Build month-by-month for realistic scenario
+        const fyMonths = [];
+        for (let m = 0; m < 12; m++) {
+          const mi = (10 + m) % 12;
+          const yr = mi >= 10 ? fy.newStart : fy.newStart + 1;
+          fyMonths.push({ mi, yr, label: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mi]} ${yr}` });
+        }
+
+        // Map deals to FY month index
+        const dealsByIdx = realisticDeals.map(d => {
+          const bp = d._bill || parseMonth(d.billingStart);
+          if (!bp) return { ...d, fyIdx: 0 };
+          const dealMI = bp.month;
+          const dealYr = bp.year;
+          let fyIdx;
+          if (dealMI >= 10) fyIdx = dealMI - 10 + (dealYr === fy.newStart ? 0 : 12);
+          else fyIdx = dealMI + 2 + (dealYr === fy.newStart + 1 ? 0 : (dealYr > fy.newStart + 1 ? 12 : -12));
+          fyIdx = Math.max(0, Math.min(11, fyIdx));
+          return { ...d, fyIdx };
+        });
+
+        // Costs from spreadsheet
+        const md = boardPlan.monthlyData || [];
+        const getMonthCost = (mi, yr) => {
+          const entry = md.find(m => {
+            const p = parseMonth(m.month);
+            return p && p.month === mi && p.year === yr;
+          });
+          const fallback = md.filter(m => { const p = parseMonth(m.month); return p && inFY(p, fy.newStart); });
+          return entry ? entry.totalCost : (fallback.length > 0 ? fallback[fallback.length - 1].totalCost : 0);
+        };
+
+        // Month-by-month
+        let cashBalance = 0;
+        let totalGPEarned = 0;
+        let totalCosts = 0;
+        const rows = fyMonths.map((fm, idx) => {
+          const activeRec = dealsByIdx.filter(d => d.fyIdx <= idx && d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
+          const monthNR = dealsByIdx.filter(d => d.fyIdx === idx && d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+          const newDeals = dealsByIdx.filter(d => d.fyIdx === idx);
+          const recGP = baseMonthlyGP + activeRec;
+          const cost = getMonthCost(fm.mi, fm.yr);
+          const net = recGP + monthNR - cost;
+          cashBalance += net;
+          totalGPEarned += recGP + monthNR;
+          totalCosts += cost;
+          return { ...fm, recGP, nrGP: monthNR, cost, net, cashBalance, newDeals };
+        });
+
+        const endOfFYRecGP = rows[rows.length - 1].recGP;
+        const endOfFYCost = rows[rows.length - 1].cost;
+        const fyPL = totalGPEarned - totalCosts;
+
+        // Alysha overlay: R78 recurring £1k/mo from Jan + £5k/mo NR from Jan
+        const alyshaStart = 2; // FY month index: Jan = 2 (Nov=0, Dec=1, Jan=2...)
+        const alyshaMonths = 12 - alyshaStart; // 10 months
+        let alyshaR78 = 0;
+        for (let i = 0; i < alyshaMonths; i++) alyshaR78 += 1000 * (alyshaMonths - i);
+        const alyshaNR = 5000 * alyshaMonths;
+        const alyshaTotal = alyshaR78 + alyshaNR;
+        const alyshaEndRec = 1000 * alyshaMonths; // £10k/mo by Oct
+
+        // Alysha month-by-month overlay
+        let alyCashBalance = 0;
+        let alyTotalGP = 0;
+        const alyRows = fyMonths.map((fm, idx) => {
+          const activeRec = dealsByIdx.filter(d => d.fyIdx <= idx && d.dealType === 'Recurring').reduce((s, d) => s + d.profit, 0);
+          const monthNR = dealsByIdx.filter(d => d.fyIdx === idx && d.dealType !== 'Recurring').reduce((s, d) => s + d.profit, 0);
+          // Add Alysha: from Jan (idx=2), she adds £1k/mo × months active so far
+          const alyRecGP = idx >= alyshaStart ? 1000 * (idx - alyshaStart + 1) : 0;
+          const alyNR = idx >= alyshaStart ? 5000 : 0;
+          const recGP = baseMonthlyGP + activeRec + alyRecGP;
+          const totalNR = monthNR + alyNR;
+          const cost = getMonthCost(fm.mi, fm.yr);
+          const net = recGP + totalNR - cost;
+          alyCashBalance += net;
+          alyTotalGP += recGP + totalNR;
+          return { ...fm, recGP, nrGP: totalNR, cost, net, cashBalance: alyCashBalance };
+        });
+
+        const alyFYPL = alyTotalGP - totalCosts;
+
+        return (
+          <>
+            <SubHeader>Realistic Scenario - Closed Won + Negotiating Only</SubHeader>
+            <p className="text-[#5A7A95] text-[10px] mb-4 italic">
+              What the {fy.newLabel} looks like if we don't win any new business beyond what's already Closed Won or Negotiating. 
+              These are the deals we're most confident about. Shown with and without Alysha's predicted contribution.
+            </p>
+
+            {/* Deal list */}
+            <div className={`${card} mb-4`}>
+              <p className="text-white font-semibold text-sm mb-3">Deals Included ({realisticDeals.length})</p>
+              <table className="w-full text-xs">
+               <thead>
+                 <tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                   <th className="text-left py-1">Customer</th>
+                   <th className="text-left py-1">Type</th>
+                   <th className="text-left py-1">Stage</th>
+                   <th className="text-right py-1">GP/mo</th>
+                   <th className="text-right py-1">Billing Start</th>
+                   <th className="text-right py-1">FY Contribution</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {dealsByIdx.map((d, i) => {
+                   const fyMonthsRemaining = 12 - d.fyIdx;
+                   const contribution = d.dealType === 'Recurring' ? d.profit * fyMonthsRemaining : d.profit;
+                   return (
+                     <tr key={i} className="border-b border-[#2A4A6F]/30">
+                       <td className="py-1 text-white/80 truncate max-w-[180px]">{d.customer}</td>
+                       <td className="py-1">
+                         <span className={`px-1.5 py-0.5 rounded text-[10px] ${d.dealType === 'Recurring' ? 'bg-[#059669]/20 text-[#059669]' : 'bg-amber-500/20 text-amber-400'}`}>
+                           {d.dealType}
+                         </span>
+                       </td>
+                       <td className="py-1 text-[#5A7A95]">{d.stage}</td>
+                       <td className="py-1 text-right font-mono text-white">{money(d.profit)}{d.dealType === 'Recurring' ? '/mo' : ''}</td>
+                       <td className="py-1 text-right text-[#5A7A95]">{d.billingStart}</td>
+                       <td className="py-1 text-right font-mono text-[#f59e0b] font-semibold">{money(contribution)}</td>
+                     </tr>
+                   );
+                 })}
+               </tbody>
+               <tfoot>
+                 <tr className="border-t border-[#2A4A6F] font-semibold">
+                   <td colSpan={3} className="py-2 text-white">Total</td>
+                   <td className="py-2 text-right font-mono text-white">{money(realisticRecGP)}/mo + {money(realisticNRGP)} NR</td>
+                   <td></td>
+                   <td className="py-2 text-right font-mono text-[#f59e0b]">{money(dealsByIdx.reduce((s, d) => s + (d.dealType === 'Recurring' ? d.profit * (12 - d.fyIdx) : d.profit), 0))}</td>
+                 </tr>
+               </tfoot>
+              </table>
+            </div>
+
+            {/* Side by side: Without Alysha / With Alysha */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              {/* WITHOUT Alysha */}
+              <div className={`${card} border-l-4 border-l-[#f59e0b]`}>
+               <p className="text-white font-semibold text-sm mb-3">Without Alysha</p>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-[11px]">
+                   <thead>
+                     <tr className="text-[#5A7A95] text-[10px] border-b border-[#2A4A6F]">
+                       <th className="text-left py-1">Month</th>
+                       <th className="text-right py-1">Rec GP</th>
+                       <th className="text-right py-1">NR</th>
+                       <th className="text-right py-1">Costs</th>
+                       <th className="text-right py-1">Cash</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {rows.map((r, i) => (
+                       <React.Fragment key={i}>
+                         <tr className={`border-b border-[#2A4A6F]/30 ${r.cashBalance < 0 ? 'bg-red-900/10' : ''}`}>
+                           <td className="py-0.5 text-white/80">{r.label}</td>
+                           <td className="py-0.5 text-right font-mono text-[#059669]">{money(r.recGP)}</td>
+                           <td className="py-0.5 text-right font-mono text-[#0EA5E9]">{r.nrGP > 0 ? money(r.nrGP) : '-'}</td>
+                           <td className="py-0.5 text-right font-mono text-red-400">{money(r.cost)}</td>
+                           <td className={`py-0.5 text-right font-mono font-bold ${r.cashBalance >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(r.cashBalance)}</td>
+                         </tr>
+                         {r.newDeals.length > 0 && r.newDeals.map((d, j) => (
+                           <tr key={`d-${i}-${j}`} className="bg-[#1A2A3F]/50">
+                             <td colSpan={3} className="py-0 pl-3 text-[9px] text-[#5A7A95] truncate">↳ {d.customer} ({d.dealType === 'Recurring' ? money(d.profit) + '/mo' : money(d.profit) + ' NR'})</td>
+                             <td colSpan={2}></td>
+                           </tr>
+                         ))}
+                       </React.Fragment>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+               <div className="border-t border-[#2A4A6F] mt-3 pt-3 grid grid-cols-2 gap-3 text-xs">
+                 <div>
+                   <p className="text-[#5A7A95]">Total FY GP</p>
+                   <p className="text-[#f59e0b] font-bold text-lg">{money(totalGPEarned)}</p>
+                 </div>
+                 <div>
+                   <p className="text-[#5A7A95]">FY P&amp;L</p>
+                   <p className={`font-bold text-lg ${fyPL >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(fyPL)}</p>
+                 </div>
+                 <div>
+                   <p className="text-[#5A7A95]">End of FY Monthly Rec</p>
+                   <p className="text-[#059669] font-bold">{money(endOfFYRecGP)}/mo</p>
+                 </div>
+                 <div>
+                   <p className="text-[#5A7A95]">vs Monthly Costs</p>
+                   <p className={`font-bold ${endOfFYRecGP >= endOfFYCost ? 'text-[#059669]' : 'text-red-400'}`}>
+                     {endOfFYRecGP >= endOfFYCost ? '✓ Covering' : `✗ Gap: ${money(endOfFYCost - endOfFYRecGP)}/mo`}
+                   </p>
+                 </div>
+               </div>
+              </div>
+
+              {/* WITH Alysha */}
+              <div className={`${card} border-l-4 border-l-[#a855f7]`}>
+               <p className="text-white font-semibold text-sm mb-3">With Alysha</p>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-[11px]">
+                   <thead>
+                     <tr className="text-[#5A7A95] text-[10px] border-b border-[#2A4A6F]">
+                       <th className="text-left py-1">Month</th>
+                       <th className="text-right py-1">Rec GP</th>
+                       <th className="text-right py-1">NR</th>
+                       <th className="text-right py-1">Costs</th>
+                       <th className="text-right py-1">Cash</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {alyRows.map((r, i) => (
+                       <tr key={i} className={`border-b border-[#2A4A6F]/30 ${r.cashBalance < 0 ? 'bg-red-900/10' : ''} ${i >= alyshaStart ? 'bg-[#a855f7]/5' : ''}`}>
+                         <td className="py-0.5 text-white/80">{r.label}</td>
+                         <td className="py-0.5 text-right font-mono text-[#059669]">{money(r.recGP)}</td>
+                         <td className="py-0.5 text-right font-mono text-[#0EA5E9]">{r.nrGP > 0 ? money(r.nrGP) : '-'}</td>
+                         <td className="py-0.5 text-right font-mono text-red-400">{money(r.cost)}</td>
+                         <td className={`py-0.5 text-right font-mono font-bold ${r.cashBalance >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(r.cashBalance)}</td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+               <div className="border-t border-[#2A4A6F] mt-3 pt-3 grid grid-cols-2 gap-3 text-xs">
+                 <div>
+                   <p className="text-[#5A7A95]">Total FY GP</p>
+                   <p className="text-[#f59e0b] font-bold text-lg">{money(alyTotalGP)}</p>
+                   <p className="text-[#a855f7] text-[10px]">+{money(alyshaTotal)} from Alysha</p>
+                 </div>
+                 <div>
+                   <p className="text-[#5A7A95]">FY P&amp;L</p>
+                   <p className={`font-bold text-lg ${alyFYPL >= 0 ? 'text-[#059669]' : 'text-red-400'}`}>{money(alyFYPL)}</p>
+                   <p className="text-[#a855f7] text-[10px]">+{money(alyshaTotal)} vs without</p>
+                 </div>
+                 <div>
+                   <p className="text-[#5A7A95]">End of FY Monthly Rec</p>
+                   <p className="text-[#059669] font-bold">{money(endOfFYRecGP + alyshaEndRec)}/mo</p>
+                   <p className="text-[#a855f7] text-[10px]">+{money(alyshaEndRec)}/mo from Alysha</p>
+                 </div>
+                 <div>
+                   <p className="text-[#5A7A95]">vs Monthly Costs</p>
+                   <p className={`font-bold ${(endOfFYRecGP + alyshaEndRec) >= endOfFYCost ? 'text-[#059669]' : 'text-red-400'}`}>
+                     {(endOfFYRecGP + alyshaEndRec) >= endOfFYCost ? '✓ Covering' : `✗ Gap: ${money(endOfFYCost - endOfFYRecGP - alyshaEndRec)}/mo`}
+                   </p>
+                 </div>
+               </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
+      {/* ════════════════════════════════════════════════════════════
           HIDDEN BENEFITS - Board Surprise (Alysha)
          ════════════════════════════════════════════════════════════ */}
       {(() => {
