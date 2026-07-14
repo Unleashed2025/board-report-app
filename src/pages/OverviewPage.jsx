@@ -10,6 +10,8 @@ const SESSION_KEY = 'overview_auth';
 const card = 'rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-5';
 const fmt = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
 const money = (v) => fmt.format(v);
+const TAB_CURRENT = 'current';
+const TAB_NEW = 'new';
 
 /* â”€â”€â”€ Date / FY helpers â”€â”€â”€ */
 
@@ -90,8 +92,26 @@ function KPICards({ summary, accent = '#0EA5E9' }) {
   );
 }
 
-function DealTable({ deals, showStage = false }) {
+function DealTable({ deals, showStage = false, fyStart }) {
   if (!deals.length) return <p className="text-[#5A7A95] text-sm italic mb-4">No deals in this category.</p>;
+
+  // R78 calculation: months a deal bills within the FY (Nov fyStart - Oct fyStart+1)
+  const calcR78 = (d) => {
+    if (!fyStart || d.dealType !== 'Recurring') return null;
+    const bp = parseMonth(d.billingStart);
+    if (!bp) return { months: 12, value: d.profit * 12 };
+    const fyStartYM = fyStart * 12 + 10; // Nov
+    const fyEndYM = (fyStart + 1) * 12 + 9; // Oct
+    const dealYM = bp.year * 12 + bp.month;
+    if (dealYM <= fyStartYM) return { months: 12, value: d.profit * 12 };
+    const remaining = fyEndYM - dealYM + 1;
+    const months = Math.max(0, Math.min(12, remaining));
+    return { months, value: d.profit * months };
+  };
+
+  const showR78 = !!fyStart;
+  const totalR78 = showR78 ? deals.reduce((s, d) => { const r = calcR78(d); return s + (r ? r.value : (d.dealType !== 'Recurring' ? d.profit : 0)); }, 0) : 0;
+
   return (
     <div className="overflow-x-auto mb-6">
       <table className="w-full text-sm">
@@ -106,11 +126,15 @@ function DealTable({ deals, showStage = false }) {
             <th className="text-left py-2 pr-3">Close Month</th>
             <th className="text-left py-2 pr-3">Billing Start</th>
             <th className="text-right py-2 pr-3">Revenue</th>
-            <th className="text-right py-2">GP</th>
+            <th className="text-right py-2 pr-3">GP/mo</th>
+            {showR78 && <th className="text-right py-2 pr-3 text-[#f59e0b]">FY Months</th>}
+            {showR78 && <th className="text-right py-2 text-[#f59e0b]">FY Contribution</th>}
           </tr>
         </thead>
         <tbody>
-          {deals.map(d => (
+          {deals.map(d => {
+            const r78 = calcR78(d);
+            return (
             <tr key={d.id} className="border-b border-[#2A4A6F]/40 text-white/90">
               <td className="py-2 pr-3 font-medium">{d.customer}</td>
               <td className="py-2 pr-3">{d.owner}</td>
@@ -129,15 +153,20 @@ function DealTable({ deals, showStage = false }) {
               <td className="py-2 pr-3">{monthName(parseMonth(d.predictedMonth))}</td>
               <td className="py-2 pr-3">{monthName(parseMonth(d.billingStart))}</td>
               <td className="py-2 pr-3 text-right font-mono">{money(d.revenue)}</td>
-              <td className="py-2 text-right font-mono">{money(d.profit)}</td>
+              <td className="py-2 pr-3 text-right font-mono">{money(d.profit)}</td>
+              {showR78 && <td className="py-2 pr-3 text-right font-mono text-[#f59e0b]">{r78 ? `${r78.months}/12` : '-'}</td>}
+              {showR78 && <td className="py-2 text-right font-mono text-[#f59e0b] font-semibold">{r78 ? money(r78.value) : money(d.profit)}</td>}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t border-[#2A4A6F] text-white font-semibold">
             <td colSpan={showStage ? 8 : 7} className="py-2 pr-3 text-right">Total</td>
             <td className="py-2 pr-3 text-right font-mono">{money(deals.reduce((s, d) => s + d.revenue, 0))}</td>
-            <td className="py-2 text-right font-mono">{money(deals.reduce((s, d) => s + d.profit, 0))}</td>
+            <td className="py-2 pr-3 text-right font-mono">{money(deals.reduce((s, d) => s + d.profit, 0))}</td>
+            {showR78 && <td className="py-2 pr-3 text-right font-mono text-[#f59e0b]"></td>}
+            {showR78 && <td className="py-2 text-right font-mono text-[#f59e0b] font-bold">{money(totalR78)}</td>}
           </tr>
         </tfoot>
       </table>
@@ -174,6 +203,7 @@ export default function OverviewPage() {
   const [authenticated, setAuthenticated] = useState(() => sessionStorage.getItem(SESSION_KEY) === 'true');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState(TAB_CURRENT);
   const { boardPlan, dataLoaded, updateFromExcel, lastUpdated, sourceFilename } = useData();
   const fileRef = useRef(null);
 
@@ -189,64 +219,20 @@ export default function OverviewPage() {
     e.target.value = '';
   };
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (password === CORRECT_PASS) {
-      sessionStorage.setItem(SESSION_KEY, 'true');
-      setAuthenticated(true);
-      setError('');
-    } else {
-      setError('Incorrect password');
-    }
-  };
-
-  if (!authenticated) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="rounded-xl border border-[#2A4A6F] bg-[#1A334F] p-8 w-full max-w-md">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-lg bg-[#0EA5E9]/10 flex items-center justify-center">
-                <svg className="w-6 h-6 text-[#0EA5E9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Senior Leadership Access</h2>
-                <p className="text-[#5A7A95] text-xs">This dashboard is restricted to senior leaders only.</p>
-              </div>
-            </div>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm text-[#5A7A95] mb-1">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[#0D2338] border border-[#2A4A6F] text-white placeholder-[#5A7A95] focus:border-[#0EA5E9] focus:outline-none"
-                  placeholder="Enter password"
-                  autoFocus
-                />
-              </div>
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-lg bg-[#0EA5E9] text-white font-semibold hover:bg-[#0EA5E9]/90 transition-colors"
-              >
-                Access Dashboard
-              </button>
-            </form>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
+  // Password protection removed
 
   if (!dataLoaded || !boardPlan) {
     return (
       <Layout>
         <div className="text-center py-20">
-          <p className="text-[#5A7A95] text-lg">Upload your Board Business Plan workbook to view the dashboard.</p>
+          <p className="text-[#5A7A95] text-lg mb-4">Upload your Board Business Plan workbook to view the dashboard.</p>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleReupload} className="hidden" />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="px-6 py-3 rounded-lg bg-[#0EA5E9] text-white text-sm font-semibold hover:bg-[#0EA5E9]/90 transition-colors"
+          >
+            Upload Excel File
+          </button>
         </div>
       </Layout>
     );
@@ -354,10 +340,12 @@ export default function OverviewPage() {
   return (
     <Layout>
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Board Sales Dashboard</h1>
-          <p className="text-[#5A7A95] text-sm">{fy.label} &middot; Nov {fy.start} &ndash; Oct {fy.start + 1}</p>
+          <p className="text-[#5A7A95] text-sm">
+            {activeTab === TAB_CURRENT ? `${fy.label} - Nov ${fy.start} to Oct ${fy.start + 1}` : `${fy.newLabel} - Nov ${fy.newStart} to Oct ${fy.newStart + 1}`}
+          </p>
           {lastUpdated && (
             <p className="text-[#5A7A95] text-[10px] mt-1">
               Data: {sourceFilename} &middot; Uploaded {lastUpdated.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -386,6 +374,27 @@ export default function OverviewPage() {
           </button>
         </div>
       </div>
+
+      {/* ── FY Tab Switcher ── */}
+      <div className="flex gap-2 mb-8 border-b border-[#2A4A6F] pb-3">
+        <button
+          onClick={() => setActiveTab(TAB_CURRENT)}
+          className={`px-5 py-2 text-sm font-semibold rounded-lg transition-colors ${activeTab === TAB_CURRENT ? 'bg-[#0EA5E9]/10 text-[#0EA5E9] border border-[#0EA5E9]' : 'text-[#5A7A95] hover:text-white border border-transparent'}`}
+        >
+          Current FY ({fy.label})
+        </button>
+        <button
+          onClick={() => setActiveTab(TAB_NEW)}
+          className={`px-5 py-2 text-sm font-semibold rounded-lg transition-colors ${activeTab === TAB_NEW ? 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]' : 'text-[#5A7A95] hover:text-white border border-transparent'}`}
+        >
+          New FY ({fy.newLabel})
+        </button>
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════
+          CURRENT FY TAB
+         ════════════════════════════════════════════════════════════════ */}
+      {activeTab === TAB_CURRENT && (<>
 
       {/* ── Top-level summary cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
@@ -453,12 +462,12 @@ export default function OverviewPage() {
       <KPICards summary={summarise(cwImpactingThisFY)} accent="#059669" />
 
       <SubHeader>Currently Billing ({cwBillingNow.length} deals)</SubHeader>
-      <DealTable deals={cwBillingNow} />
+      <DealTable deals={cwBillingNow} fyStart={fy.start} />
 
       {cwDueThisFY.length > 0 && (
         <>
           <SubHeader>Due to Start Billing This FY ({cwDueThisFY.length} deals)</SubHeader>
-          <DealTable deals={cwDueThisFY} />
+          <DealTable deals={cwDueThisFY} fyStart={fy.start} />
         </>
       )}
 
@@ -476,7 +485,7 @@ export default function OverviewPage() {
             Deals currently being negotiated where we expect to close and begin billing within the current FY. If all close, this GP adds to our end-of-year position.
           </p>
           <KPICards summary={summarise(negBillThisFY)} accent="#06b6d4" />
-          <DealTable deals={negBillThisFY} />
+          <DealTable deals={negBillThisFY} fyStart={fy.start} />
         </>
       )}
 
@@ -619,6 +628,46 @@ export default function OverviewPage() {
         </table>
       </div>
 
+      </>)}
+
+      {/* ════════════════════════════════════════════════════════════════
+          NEW FY TAB
+         ════════════════════════════════════════════════════════════════ */}
+      {activeTab === TAB_NEW && (<>
+
+      {/* ── Starting Position (carried from end of Current FY) ── */}
+      <div className={`${card} mb-8 border-l-4 border-l-[#f59e0b]`}>
+        <p className="text-white font-semibold mb-3">Starting Position - Carried from {fy.label}</p>
+        <p className="text-[#5A7A95] text-xs mb-4 italic">
+          Monthly recurring GP and costs at the end of {fy.label} (Oct {fy.start + 1}) that carry forward into {fy.newLabel}.
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Recurring GP</p>
+            <p className="text-[#059669] font-bold text-lg">{money(endFYSummary.monthlyGP)}</p>
+            <p className="text-[#5A7A95] text-[10px]">{endFYSummary.recCount} recurring deal(s)</p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Costs (Oct {fy.start + 1})</p>
+            <p className="text-red-400 font-bold text-lg">{money(monthlyCosts)}</p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">Monthly Surplus / Gap</p>
+            <p className={`font-bold text-lg ${endFYSummary.monthlyGP >= monthlyCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+              {money(endFYSummary.monthlyGP - monthlyCosts)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[#5A7A95] text-xs">New Hires Joining</p>
+            <div className="text-[#5A7A95] text-[10px] mt-1">
+              {(boardPlan.newHireCosts || []).filter(h => { const p = parseMonth(h.startMonth); return p && inFY(p, fy.newStart); }).map((h, i) => (
+                <p key={i}>{h.name} - {h.startMonth}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ════════════════════════════════════════════════════════════
           SECTION 5: NEW FY POSITION
          ════════════════════════════════════════════════════════════ */}
@@ -658,7 +707,7 @@ export default function OverviewPage() {
               </div>
             </div>
           </InsightCard>
-          <DealTable deals={newFYNewDeals} />
+          <DealTable deals={newFYNewDeals} fyStart={fy.newStart} />
         </>
       )}
 
@@ -672,7 +721,7 @@ export default function OverviewPage() {
             <SubHeader>
               {stage} ({stageDeals.length} deals) &middot; {money(s.monthlyGP)} monthly GP &middot; {money(s.nrGP)} NR GP
             </SubHeader>
-            <DealTable deals={stageDeals} showStage={false} />
+            <DealTable deals={stageDeals} showStage={false} fyStart={fy.newStart} />
           </div>
         );
       })}
@@ -683,87 +732,120 @@ export default function OverviewPage() {
 
       {/* 6. New FY Financial Forecast - GP vs Costs */}
       {(() => {
-        const allNewFYDeals = [...newFYNewDeals, ...newFYPipeline];
-        const allNewFYSummary = summarise(allNewFYDeals);
+        // Split deals by certainty
+        const cwDeals = newFYNewDeals; // Closed Won - secured
+        const negDeals = newFYPipeline.filter(d => d.stage === 'Negotiating');
+        const quotDeals = newFYPipeline.filter(d => d.stage === 'Quoting');
+        const earlyDeals = newFYPipeline.filter(d => ['Qualified', 'Lead', 'To Be Contacted'].includes(d.stage));
 
-        // R78 calculation: how many months each deal bills within the FY
-        // FY runs Nov (newStart) to Oct (newStart+1). A deal billing from month X gets remaining months.
-        const fyStartYM = fy.newStart * 12 + 10; // Nov of new FY start year
-        const fyEndYMNew = (fy.newStart + 1) * 12 + 9; // Oct of new FY end year
-        const calcR78Months = (deal) => {
-          const bp = deal._bill || parseMonth(deal.billingStart);
-          if (!bp) return 12; // assume full year if unknown
-          const dealYM = bp.year * 12 + bp.month;
-          if (dealYM <= fyStartYM) return 12; // already billing before FY start = full year
-          const remaining = fyEndYMNew - dealYM + 1;
-          return Math.max(0, Math.min(12, remaining));
-        };
+        // Recurring base (carrying forward from current FY)
+        const baseMonthlyGP = newFYCombinedBaseSummary.monthlyGP;
+        const baseAnnualGP = baseMonthlyGP * 12;
 
-        // Recurring base (carrying forward) = full 12 months
-        const baseR78GP = newFYCombinedBaseSummary.monthlyGP * 12;
-        // New FY deals get R78-weighted months
-        const newDealsR78GP = allNewFYDeals
-          .filter(d => d.dealType === 'Recurring')
-          .reduce((s, d) => s + d.profit * calcR78Months(d), 0);
-        const totalRecR78GP = baseR78GP + newDealsR78GP;
-        // NR GP (one-time, counted in full)
-        const totalNewFYNRGP = allNewFYSummary.nrGP;
-        // Total FY GP
-        const totalFYGP = totalRecR78GP + totalNewFYNRGP;
+        // GP by stage
+        const cwSummary = summarise(cwDeals);
+        const negSummary = summarise(negDeals);
+        const quotSummary = summarise(quotDeals);
+        const earlySummary = summarise(earlyDeals);
 
-        // New FY costs - use the actual cost from the spreadsheet for end of new FY
+        // Actual total FY costs from spreadsheet (sum of each month)
+        const md = boardPlan.monthlyData || [];
+        const newFYMonthlyData = md.filter(m => {
+          const p = parseMonth(m.month);
+          return p && inFY(p, fy.newStart);
+        });
+        const totalFYCosts = newFYMonthlyData.reduce((s, m) => s + m.totalCost, 0);
+        const avgMonthlyCost = newFYMonthlyData.length > 0 ? Math.round(totalFYCosts / newFYMonthlyData.length) : 0;
+
+        // New hire cost info
         const newHires = (boardPlan.newHireCosts || []).filter(h => {
           const p = parseMonth(h.startMonth);
           return p && inFY(p, fy.newStart);
         });
-        const newFYEndCost = (() => {
-          const md = boardPlan.monthlyData || [];
-          // Find Oct of new FY end year (fy.newStart + 1)
-          const octEntry = md.find(m => {
-            const p = parseMonth(m.month);
-            return p && p.month === 9 && p.year === fy.newStart + 1; // Oct = month 9
-          });
-          return octEntry ? octEntry.totalCost : (md[md.length - 1]?.totalCost || 0);
-        })();
-        const newFYMonthlyCosts = newFYEndCost;
-        const totalFYCosts = newFYMonthlyCosts * 12;
+        const newFYMonthlyCosts = newFYMonthlyData.length > 0 ? newFYMonthlyData[newFYMonthlyData.length - 1].totalCost : 0;
+
+        // Total GP by certainty level
+        const securedGP = baseAnnualGP + cwSummary.monthlyGP * 12 + cwSummary.nrGP;
+        const likelyGP = negSummary.monthlyGP * 12 + negSummary.nrGP;
+        const possibleGP = (quotSummary.monthlyGP + earlySummary.monthlyGP) * 12 + quotSummary.nrGP + earlySummary.nrGP;
+        const totalGP = securedGP + likelyGP + possibleGP;
+        const totalNewFYNRGP = cwSummary.nrGP + negSummary.nrGP + quotSummary.nrGP + earlySummary.nrGP;
 
         return (
           <>
             <SubHeader>New FY Financial Forecast - GP vs Costs</SubHeader>
+            <p className="text-[#5A7A95] text-[10px] mb-4 italic">
+              {fy.newLabel} forecast broken down by deal certainty. Shows what GP is already secured vs what depends on closing pipeline deals. Costs reflect actual monthly figures from the business plan including new hires ramping in.
+            </p>
             <InsightCard accent="#f59e0b">
-              <p className="text-white font-semibold mb-3">{fy.newLabel} Forecast (R78-Weighted)</p>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm mb-4">
-                <div>
-                  <p className="text-[#5A7A95] text-xs">Recurring Base (12 months)</p>
-                  <p className="text-white font-bold">{money(baseR78GP)}</p>
-                  <p className="text-[#5A7A95] text-[10px]">{newFYCombinedBaseSummary.recCount} deal(s) × 12mo @ {money(newFYCombinedBaseSummary.monthlyGP)}/mo</p>
+              <p className="text-white font-semibold mb-4">{fy.newLabel} GP Forecast by Certainty</p>
+
+              {/* Secured */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-3 h-3 rounded-full bg-[#059669]"></span>
+                  <p className="text-[#059669] font-semibold text-sm">Secured (Closed Won + Recurring Base)</p>
+                  <p className="text-[#059669] font-bold ml-auto">{money(securedGP)}</p>
                 </div>
-                <div>
-                  <p className="text-[#5A7A95] text-xs">New Deals Recurring (R78)</p>
-                  <p className="text-[#f59e0b] font-bold">{money(newDealsR78GP)}</p>
-                  <p className="text-[#5A7A95] text-[10px]">{allNewFYDeals.filter(d => d.dealType === 'Recurring').length} deal(s) weighted by billing start</p>
-                </div>
-                <div>
-                  <p className="text-[#5A7A95] text-xs">NR GP (Project Work)</p>
-                  <p className="text-amber-400 font-bold">{money(totalNewFYNRGP)}</p>
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                  <div>Recurring base: {money(baseAnnualGP)} ({money(baseMonthlyGP)}/mo x 12)</div>
+                  <div>CW recurring: {money(cwSummary.monthlyGP * 12)} ({cwDeals.filter(d => d.dealType === 'Recurring').length} deals)</div>
+                  <div>CW project/NR: {money(cwSummary.nrGP)}</div>
                 </div>
               </div>
-              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-3 gap-4 text-sm">
+
+              {/* Likely */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-3 h-3 rounded-full bg-[#f59e0b]"></span>
+                  <p className="text-[#f59e0b] font-semibold text-sm">Likely (Negotiating)</p>
+                  <p className="text-[#f59e0b] font-bold ml-auto">{money(likelyGP)}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                  <div>Recurring: {money(negSummary.monthlyGP * 12)} ({negDeals.filter(d => d.dealType === 'Recurring').length} deals)</div>
+                  <div>NR/Project: {money(negSummary.nrGP)}</div>
+                  <div>{negDeals.length} deal(s) total</div>
+                </div>
+              </div>
+
+              {/* Possible */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-3 h-3 rounded-full bg-[#0EA5E9]"></span>
+                  <p className="text-[#0EA5E9] font-semibold text-sm">Possible (Quoting + Qualified/Lead)</p>
+                  <p className="text-[#0EA5E9] font-bold ml-auto">{money(possibleGP)}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-xs text-[#5A7A95] pl-5">
+                  <div>Recurring: {money((quotSummary.monthlyGP + earlySummary.monthlyGP) * 12)}</div>
+                  <div>NR/Project: {money(quotSummary.nrGP + earlySummary.nrGP)}</div>
+                  <div>{quotDeals.length + earlyDeals.length} deal(s) total</div>
+                </div>
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Total FY GP (Pipeline)</p>
-                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalFYGP)}</p>
+                  <p className="text-[#5A7A95] text-xs">Total FY GP (All Stages)</p>
+                  <p className="text-[#f59e0b] font-bold text-lg">{money(totalGP)}</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">Total FY Costs</p>
+                  <p className="text-[#5A7A95] text-xs">Total FY Costs (Actual)</p>
                   <p className="text-red-400 font-bold text-lg">{money(totalFYCosts)}</p>
-                  <p className="text-[#5A7A95] text-[10px]">{money(newFYMonthlyCosts)}/mo × 12</p>
+                  <p className="text-[#5A7A95] text-[10px]">Avg {money(avgMonthlyCost)}/mo (ramps from {money(newFYMonthlyData[0]?.totalCost || 0)} to {money(newFYMonthlyCosts)})</p>
                 </div>
                 <div>
-                  <p className="text-[#5A7A95] text-xs">FY Net P&amp;L</p>
-                  <p className={`font-bold text-lg ${totalFYGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
-                    {money(totalFYGP - totalFYCosts)}
+                  <p className="text-[#5A7A95] text-xs">Best Case P&amp;L</p>
+                  <p className={`font-bold text-lg ${totalGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(totalGP - totalFYCosts)}
                   </p>
+                  <p className="text-[#5A7A95] text-[10px]">If all pipeline closes</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Secured Only P&amp;L</p>
+                  <p className={`font-bold text-lg ${securedGP >= totalFYCosts ? 'text-[#059669]' : 'text-red-400'}`}>
+                    {money(securedGP - totalFYCosts)}
+                  </p>
+                  <p className="text-[#5A7A95] text-[10px]">Without closing any more deals</p>
                 </div>
               </div>
             </InsightCard>
@@ -1150,6 +1232,157 @@ export default function OverviewPage() {
           </>
         );
       })()}
+
+      {/* ════════════════════════════════════════════════════════════
+          HIDDEN BENEFITS - Board Surprise (Alysha)
+         ════════════════════════════════════════════════════════════ */}
+      {(() => {
+        // Alysha: £1k/mo recurring GP starting January, R78 weighted
+        // FY26/27 = Nov 2026 - Oct 2027. Jan = month 3, so 10 months remain (Jan-Oct)
+        const alyshaStartMonth = 2; // Jan = index 2 in FY month order (Nov=0, Dec=1, Jan=2...)
+        const fyMonths = 12;
+        const monthlyRecGP = 1000;
+        // She closes £1k/mo each month from Jan. Each deal bills for remaining FY months.
+        const monthsActive = fyMonths - alyshaStartMonth; // 10 months (Jan-Oct)
+        // R78: deal closed in month X bills for (fyMonths - X) remaining months
+        // Jan(10) + Feb(9) + Mar(8) + Apr(7) + May(6) + Jun(5) + Jul(4) + Aug(3) + Sep(2) + Oct(1)
+        let r78Total = 0;
+        const r78Rows = [];
+        for (let i = 0; i < monthsActive; i++) {
+          const remaining = monthsActive - i;
+          const contribution = monthlyRecGP * remaining;
+          r78Total += contribution;
+          const monthNames = ['Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct'];
+          r78Rows.push({ month: monthNames[alyshaStartMonth + i], remaining, contribution });
+        }
+
+        // NR GP: £5k/mo for 10 months (Jan-Oct)
+        const nrPerMonth = 5000;
+        const totalNRGP = nrPerMonth * monthsActive; // £50k
+
+        // End of FY monthly recurring position: by Oct she has £10k/mo recurring (£1k × 10 months of deals)
+        const endOfFYMonthlyRec = monthlyRecGP * monthsActive; // £10k/mo by year end
+
+        const totalAlyshaGP = r78Total + totalNRGP;
+
+        // Pull in existing end of FY summary figures to show combined
+        const md = boardPlan.monthlyData || [];
+        const newFYMonthlyData = md.filter(m => {
+          const p = parseMonth(m.month);
+          return p && inFY(p, fy.newStart);
+        });
+        const totalFYCostsActual = newFYMonthlyData.reduce((s, m) => s + m.totalCost, 0);
+
+        return (
+          <div className="mt-12 border-t-2 border-dashed border-[#f59e0b]/40 pt-8">
+            <SectionHeader
+              title="Hidden Benefits - Board Surprise"
+              subtitle="Additional GP not included in main forecast figures above"
+              accent="#a855f7"
+            />
+            <p className="text-[#5A7A95] text-xs mb-4 -mt-2 italic">
+              Alysha's predicted contribution is excluded from the main forecast as a positive surprise for the board. These figures sit on top of everything shown above.
+            </p>
+
+            <InsightCard accent="#a855f7">
+              <p className="text-white font-semibold mb-4">Alysha - Predicted GP Contribution ({fy.newLabel})</p>
+
+              {/* Recurring R78 */}
+              <div className="mb-4">
+                <p className="text-[#a855f7] font-semibold text-sm mb-2">Recurring GP (Rule of 78) - Starting January</p>
+                <p className="text-[#5A7A95] text-[10px] mb-3">
+                  Closing £1,000/mo GP each month from January. Each deal accumulates billing for the remainder of the FY.
+                </p>
+                <div className="overflow-x-auto mb-3">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-[#5A7A95] border-b border-[#2A4A6F]">
+                        <th className="text-left py-1 pr-3">Month Closed</th>
+                        <th className="text-right py-1 pr-3">GP/mo</th>
+                        <th className="text-right py-1 pr-3">FY Months</th>
+                        <th className="text-right py-1 text-[#a855f7]">FY Contribution</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r78Rows.map((r, i) => (
+                        <tr key={i} className="border-b border-[#2A4A6F]/30 text-white/80">
+                          <td className="py-1 pr-3">{r.month}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{money(monthlyRecGP)}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{r.remaining}/12</td>
+                          <td className="py-1 text-right font-mono text-[#a855f7] font-semibold">{money(r.contribution)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-[#2A4A6F] font-semibold text-white">
+                        <td colSpan={3} className="py-2 pr-3 text-right">Total R78 Recurring GP</td>
+                        <td className="py-2 text-right font-mono text-[#a855f7]">{money(r78Total)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* NR GP */}
+              <div className="mb-4">
+                <p className="text-amber-400 font-semibold text-sm mb-2">Non-Recurring GP - Project Work</p>
+                <p className="text-[#5A7A95] text-[10px] mb-2">
+                  £5,000/mo NR GP from January to October ({monthsActive} months)
+                </p>
+                <p className="text-amber-400 font-bold text-lg">{money(totalNRGP)}</p>
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-[#2A4A6F] pt-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-[#5A7A95] text-xs">R78 Recurring GP</p>
+                  <p className="text-[#a855f7] font-bold text-lg">{money(r78Total)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">NR GP (Projects)</p>
+                  <p className="text-amber-400 font-bold text-lg">{money(totalNRGP)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Total Alysha GP</p>
+                  <p className="text-white font-bold text-xl">{money(totalAlyshaGP)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">End of FY Monthly Rec (+)</p>
+                  <p className="text-[#059669] font-bold text-lg">+{money(endOfFYMonthlyRec)}/mo</p>
+                  <p className="text-[#5A7A95] text-[10px]">Added to recurring base</p>
+                </div>
+              </div>
+            </InsightCard>
+
+            {/* Impact on End of FY Summary */}
+            <div className={`${card} mt-4 mb-6 border-l-4 border-l-[#a855f7]`}>
+              <p className="text-white font-semibold mb-3">Impact on {fy.newLabel} End of Year Position</p>
+              <p className="text-[#5A7A95] text-[10px] mb-4 italic">
+                Shows what the FY figures look like with Alysha's contribution added on top of the main forecast.
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Additional FY GP (Alysha)</p>
+                  <p className="text-[#a855f7] font-bold text-lg">+{money(totalAlyshaGP)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">R78 {money(r78Total)} + NR {money(totalNRGP)}</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Additional Monthly Rec (End of FY)</p>
+                  <p className="text-[#059669] font-bold text-lg">+{money(endOfFYMonthlyRec)}/mo</p>
+                  <p className="text-[#5A7A95] text-[10px]">Carrying into following year</p>
+                </div>
+                <div>
+                  <p className="text-[#5A7A95] text-xs">Total FY Costs</p>
+                  <p className="text-red-400 font-bold text-lg">{money(totalFYCostsActual)}</p>
+                  <p className="text-[#5A7A95] text-[10px]">Unchanged - already included in main forecast</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      </>)}
 
       {/* ── Footer ── */}
       <div className="border-t border-[#2A4A6F] mt-10 pt-6 text-center">
