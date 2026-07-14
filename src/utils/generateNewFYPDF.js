@@ -644,6 +644,277 @@ export async function generateNewFYPDF(boardPlan, r78Data = {}) {
       : 'No meaningful December NR injection is scheduled, so runway depends more heavily on monthly recurring conversion.',
   });
 
+  // ===================================================================
+  // DEAL ANALYSIS PAGE
+  // ===================================================================
+  pdf.addPage();
+  y = margin;
+  pdf.setFontSize(18);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(30, 30, 30);
+  pdf.text('Deal Analysis & Pipeline Shape', margin, y + 4);
+  y += 10;
+
+  // All new FY deals for analysis
+  const allAnalysisDeals = [...data.newFYNewDeals, ...data.newFYPipeline];
+  const recDeals = allAnalysisDeals.filter((d) => d.dealType === 'Recurring');
+  const nrDeals = allAnalysisDeals.filter((d) => d.dealType !== 'Recurring');
+
+  // Deal size bands
+  const microRec = recDeals.filter((d) => (d.profit || 0) < 500);
+  const smallRec = recDeals.filter((d) => (d.profit || 0) >= 500 && (d.profit || 0) < 1000);
+  const midRec = recDeals.filter((d) => (d.profit || 0) >= 1000 && (d.profit || 0) < 2000);
+  const largeRec = recDeals.filter((d) => (d.profit || 0) >= 2000);
+  const avgRecGP = recDeals.length > 0 ? Math.round(recDeals.reduce((s, d) => s + (d.profit || 0), 0) / recDeals.length) : 0;
+  const avgNRGP = nrDeals.length > 0 ? Math.round(nrDeals.reduce((s, d) => s + (d.profit || 0), 0) / nrDeals.length) : 0;
+  const medianRecGP = recDeals.length > 0 ? [...recDeals].sort((a, b) => (a.profit || 0) - (b.profit || 0))[Math.floor(recDeals.length / 2)].profit || 0 : 0;
+
+  // Service type breakdown
+  const serviceTypes = {};
+  allAnalysisDeals.forEach((d) => {
+    const svc = d.serviceType || 'Other';
+    if (!serviceTypes[svc]) serviceTypes[svc] = { count: 0, recGP: 0, nrGP: 0 };
+    serviceTypes[svc].count += 1;
+    if (d.dealType === 'Recurring') serviceTypes[svc].recGP += d.profit || 0;
+    else serviceTypes[svc].nrGP += d.profit || 0;
+  });
+  const svcRows = Object.entries(serviceTypes)
+    .sort((a, b) => (b[1].recGP + b[1].nrGP) - (a[1].recGP + a[1].nrGP))
+    .map(([name, v]) => [
+      name,
+      String(v.count),
+      { text: money(v.recGP) + '/mo', align: 'right', color: v.recGP > 0 ? BRAND.green : BRAND.muted },
+      { text: money(v.nrGP), align: 'right', color: v.nrGP > 0 ? BRAND.amber : BRAND.muted },
+    ]);
+
+  // Customer concentration
+  const customerDeals = {};
+  allAnalysisDeals.forEach((d) => {
+    const cust = (d.customer || 'Unknown').split('—')[0].split('–')[0].trim();
+    if (!customerDeals[cust]) customerDeals[cust] = { count: 0, totalGP: 0 };
+    customerDeals[cust].count += 1;
+    customerDeals[cust].totalGP += d.profit || 0;
+  });
+  const topCustomers = Object.entries(customerDeals)
+    .sort((a, b) => b[1].totalGP - a[1].totalGP)
+    .slice(0, 5);
+
+  heading('Deal Size Overview', `${allAnalysisDeals.length} deals in the new FY pipeline across all stages.`);
+  y = drawTable(
+    pdf, y, margin, contentW,
+    ['Metric', { text: 'Value', align: 'right' }],
+    [
+      ['Total deals in pipeline', { text: String(allAnalysisDeals.length), align: 'right', bold: true }],
+      ['Recurring deals', { text: `${recDeals.length} (${money(recDeals.reduce((s, d) => s + (d.profit || 0), 0))}/mo total)`, align: 'right', color: BRAND.green }],
+      ['Non-recurring deals', { text: `${nrDeals.length} (${money(nrDeals.reduce((s, d) => s + (d.profit || 0), 0))} total)`, align: 'right', color: BRAND.amber }],
+      ['Average recurring deal GP', { text: money(avgRecGP) + '/mo', align: 'right' }],
+      ['Median recurring deal GP', { text: money(medianRecGP) + '/mo', align: 'right' }],
+      ['Average NR deal GP', { text: money(avgNRGP), align: 'right' }],
+      ['Largest recurring deal', { text: recDeals.length > 0 ? `${[...recDeals].sort((a, b) => (b.profit || 0) - (a.profit || 0))[0].customer} (${money([...recDeals].sort((a, b) => (b.profit || 0) - (a.profit || 0))[0].profit)}/mo)` : '-', align: 'right' }],
+      ['Largest NR deal', { text: nrDeals.length > 0 ? `${[...nrDeals].sort((a, b) => (b.profit || 0) - (a.profit || 0))[0].customer} (${money([...nrDeals].sort((a, b) => (b.profit || 0) - (a.profit || 0))[0].profit)})` : '-', align: 'right' }],
+    ],
+    { headColor: BRAND.navy, colWidths: [90, 80], pageH },
+  );
+
+  heading('Recurring Deal Size Distribution', 'Monthly GP bands showing pipeline depth at each tier.');
+  y = drawTable(
+    pdf, y, margin, contentW,
+    ['Band', 'Deals', { text: 'Total GP/mo', align: 'right' }, { text: 'Avg GP/mo', align: 'right' }],
+    [
+      [{ text: 'Micro (< £500/mo)', color: microRec.length > 0 ? [45, 55, 72] : BRAND.red }, String(microRec.length), { text: money(microRec.reduce((s, d) => s + (d.profit || 0), 0)), align: 'right' }, { text: microRec.length > 0 ? money(Math.round(microRec.reduce((s, d) => s + (d.profit || 0), 0) / microRec.length)) : '-', align: 'right' }],
+      ['Small (£500-£999/mo)', String(smallRec.length), { text: money(smallRec.reduce((s, d) => s + (d.profit || 0), 0)), align: 'right' }, { text: smallRec.length > 0 ? money(Math.round(smallRec.reduce((s, d) => s + (d.profit || 0), 0) / smallRec.length)) : '-', align: 'right' }],
+      ['Mid (£1,000-£1,999/mo)', String(midRec.length), { text: money(midRec.reduce((s, d) => s + (d.profit || 0), 0)), align: 'right' }, { text: midRec.length > 0 ? money(Math.round(midRec.reduce((s, d) => s + (d.profit || 0), 0) / midRec.length)) : '-', align: 'right' }],
+      ['Large (£2,000+/mo)', String(largeRec.length), { text: money(largeRec.reduce((s, d) => s + (d.profit || 0), 0)), align: 'right' }, { text: largeRec.length > 0 ? money(Math.round(largeRec.reduce((s, d) => s + (d.profit || 0), 0) / largeRec.length)) : '-', align: 'right' }],
+    ],
+    {
+      headColor: BRAND.accent,
+      colWidths: [50, 20, 50, 50],
+      footRow: ['Total', String(recDeals.length), { text: money(recDeals.reduce((s, d) => s + (d.profit || 0), 0)), align: 'right' }, { text: money(avgRecGP), align: 'right' }],
+      pageH,
+    },
+  );
+
+  heading('GP by Service Type', 'Where the new FY GP is coming from by service line.');
+  y = drawTable(
+    pdf, y, margin, contentW,
+    ['Service Type', 'Deals', { text: 'Recurring GP/mo', align: 'right' }, { text: 'NR GP', align: 'right' }],
+    svcRows,
+    { headColor: BRAND.green, colWidths: [50, 20, 50, 50], pageH },
+  );
+
+  heading('Customer Concentration', 'Top 5 customers by GP contribution — flags single-customer dependency risk.');
+  y = drawTable(
+    pdf, y, margin, contentW,
+    ['Customer', 'Deals', { text: 'Total GP', align: 'right' }, { text: '% of Pipeline', align: 'right' }],
+    topCustomers.map(([name, v]) => {
+      const totalPipeGP = allAnalysisDeals.reduce((s, d) => s + (d.profit || 0), 0);
+      const pctVal = totalPipeGP > 0 ? ((v.totalGP / totalPipeGP) * 100).toFixed(1) : '0';
+      return [
+        name,
+        String(v.count),
+        { text: money(v.totalGP), align: 'right', color: BRAND.accent },
+        { text: `${pctVal}%`, align: 'right', color: parseFloat(pctVal) > 30 ? BRAND.red : BRAND.muted },
+      ];
+    }),
+    { headColor: BRAND.navy, colWidths: [55, 20, 45, 50], pageH },
+  );
+
+  // Pipeline gap analysis
+  heading('Pipeline Gaps & Observations', 'What the current pipeline is missing and where to focus.');
+
+  if (microRec.length === 0 && smallRec.length === 0) {
+    trendCard({
+      title: 'No Small MRR Deals',
+      type: 'warning',
+      text: `The pipeline contains zero recurring deals under £500/mo GP. Small managed support deals (£250-£500/mo) are typically the fastest to close and provide a steady stream of base-building revenue. Consider targeting smaller organisations or upselling existing relationships.`,
+    });
+  } else if (microRec.length + smallRec.length < 3) {
+    trendCard({
+      title: 'Thin Small Deal Pipeline',
+      type: 'warning',
+      text: `Only ${microRec.length + smallRec.length} deal(s) under £1,000/mo GP in the pipeline. These quick-win deals build recurring base fastest. Consider increasing lead generation activity at the sub-£1,000 tier.`,
+    });
+  }
+
+  if (largeRec.length === 0) {
+    trendCard({
+      title: 'No Large Recurring Deals',
+      type: 'info',
+      text: `No recurring deals above £2,000/mo GP are in the pipeline. Landing even one deal at this level would meaningfully shift the monthly position and reduce dependency on volume.`,
+    });
+  }
+
+  if (nrDeals.length > 0 && recDeals.length > 0) {
+    const nrPct = nrDeals.reduce((s, d) => s + (d.profit || 0), 0) / (allAnalysisDeals.reduce((s, d) => s + (d.profit || 0), 0) || 1);
+    if (nrPct > 0.5) {
+      trendCard({
+        title: 'NR Heavy Pipeline',
+        type: 'warning',
+        text: `${(nrPct * 100).toFixed(0)}% of pipeline GP is non-recurring. While NR deals provide important cashflow, the long-term goal is to build recurring revenue that covers costs sustainably. Ensure each NR engagement includes a recurring upsell path.`,
+      });
+    }
+  }
+
+  const uniqueCustomers = Object.keys(customerDeals).length;
+  if (topCustomers.length > 0) {
+    const topCustPct = (topCustomers[0][1].totalGP / (allAnalysisDeals.reduce((s, d) => s + (d.profit || 0), 0) || 1)) * 100;
+    if (topCustPct > 30) {
+      trendCard({
+        title: 'Customer Concentration Risk',
+        type: 'critical',
+        text: `${topCustomers[0][0]} accounts for ${topCustPct.toFixed(0)}% of pipeline GP across ${topCustomers[0][1].count} deal(s). Losing or delaying this customer would significantly impact the FY position. Consider diversifying the pipeline.`,
+      });
+    }
+  }
+
+  if (uniqueCustomers < 8) {
+    trendCard({
+      title: 'Narrow Customer Base',
+      type: 'warning',
+      text: `Only ${uniqueCustomers} distinct customer(s) in the new FY pipeline. A broader customer base reduces risk and improves forecast resilience. Focus lead generation on new logos alongside existing account expansion.`,
+    });
+  }
+
+  // Positive observations
+  if (recDeals.length >= 10) {
+    trendCard({
+      title: 'Strong Pipeline Volume',
+      type: 'positive',
+      text: `${recDeals.length} recurring deals in the pipeline provides good volume. Even at a 50% conversion rate, this would add ${money(Math.round(recDeals.reduce((s, d) => s + (d.profit || 0), 0) * 0.5))}/mo to the recurring base.`,
+    });
+  }
+
+  if (avgRecGP > 800) {
+    trendCard({
+      title: 'Healthy Average Deal Size',
+      type: 'positive',
+      text: `Average recurring deal size is ${money(avgRecGP)}/mo GP. This suggests the team is targeting meaningful contracts rather than sub-scale engagements.`,
+    });
+  } else if (avgRecGP > 0) {
+    trendCard({
+      title: 'Deal Size Opportunity',
+      type: 'info',
+      text: `Average recurring deal size is ${money(avgRecGP)}/mo GP. There may be an opportunity to increase average deal value through premium tier offerings or bundled services.`,
+    });
+  }
+
+  // ===================================================================
+  // LEAD GENERATION & SMALL DEAL STRATEGY PAGE
+  // ===================================================================
+  pdf.addPage();
+  y = margin;
+  pdf.setFontSize(18);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(30, 30, 30);
+  pdf.text('Lead Generation & Growth Strategy', margin, y + 4);
+  y += 10;
+
+  const sub500Deals = recDeals.filter((d) => (d.profit || 0) > 0 && (d.profit || 0) < 500);
+  const sub1kDeals = recDeals.filter((d) => (d.profit || 0) >= 500 && (d.profit || 0) < 1000);
+  const totalRecBase = recDeals.reduce((s, d) => s + (d.profit || 0), 0);
+  const targetSmallDeals = 10;
+  const avgSmallDealGP = 350;
+  const potentialSmallMRR = targetSmallDeals * avgSmallDealGP;
+
+  heading('The Small Deal Gap', 'Why building a pipeline of sub-£500/mo deals is critical for sustainable growth.');
+
+  bullet(`Current pipeline has ${sub500Deals.length} deal(s) under £500/mo GP and ${sub1kDeals.length} deal(s) in the £500-£999 range.`, sub500Deals.length === 0 ? BRAND.red : BRAND.amber);
+  bullet(`The average deal size across the pipeline is ${money(avgRecGP)}/mo, which means the business is overly reliant on landing larger, slower-moving contracts.`, BRAND.amber);
+  bullet(`Smaller deals (£250-£500/mo) typically close 2-3x faster than enterprise deals and build predictable recurring revenue with lower churn risk.`, BRAND.accent);
+  bullet(`If ${targetSmallDeals} small managed support deals at ~${money(avgSmallDealGP)}/mo were added, that would contribute an additional ${money(potentialSmallMRR)}/mo to the recurring base.`, BRAND.green);
+
+  trendCard({
+    title: 'Revenue Base Building',
+    type: 'info',
+    text: `Small recurring deals are the foundation of a resilient MSP business. Each £350/mo managed support deal adds £4,200/yr GP. Ten of these adds £42,000/yr — enough to cover a junior resource or materially close the monthly GP vs costs gap. These deals also require less sales effort and shorter procurement cycles.`,
+  });
+
+  heading('Lead Generation Recommendations', 'Tactical initiatives to build a pipeline of smaller, faster-closing opportunities that will carry into and through the new FY.');
+
+  trendCard({
+    title: '1. Targeted Outbound for SME Managed Support',
+    type: 'positive',
+    text: `Focus outbound on businesses with 10-50 employees that lack internal IT. Offer packaged managed support tiers (e.g. Bronze £250/mo, Silver £400/mo, Gold £600/mo). These close within 2-4 weeks and provide immediate recurring GP with minimal onboarding cost.`,
+  });
+  trendCard({
+    title: '2. Referral & Partner Programme',
+    type: 'positive',
+    text: `Establish a simple referral incentive for existing customers (e.g. one month free for a successful intro). Current customers are the best source of like-for-like small deals. Also explore partnerships with accountants and business advisors who work with SMEs.`,
+  });
+  trendCard({
+    title: '3. Upsell Existing Relationships',
+    type: 'info',
+    text: `Customers on ad-hoc or break-fix arrangements are prime candidates for recurring managed support contracts. Converting even a few project-only clients to £300-£500/mo managed agreements directly builds the recurring base without new customer acquisition cost.`,
+  });
+  trendCard({
+    title: '4. Digital Lead Generation',
+    type: 'info',
+    text: `Invest in SEO-optimised content around "IT support for small business", Google Ads targeting local IT support queries, and LinkedIn outreach to business owners. A modest £500-£1,000/mo digital spend can generate 5-10 qualified leads per month at the sub-£500 MRR tier.`,
+  });
+  trendCard({
+    title: '5. Quarterly Quick-Win Campaigns',
+    type: 'info',
+    text: `Run time-limited offers (e.g. "Free IT health check" or "First 3 months at 50%") to create urgency and generate a burst of small-deal pipeline at the start of each quarter. These fills gaps between larger deal conversions and smooth out revenue growth.`,
+  });
+
+  heading('Impact on New FY', 'How a stronger small-deal pipeline changes the financial outlook.');
+
+  const smallDealScenarios = [
+    ['Current pipeline only', { text: money(totalRecBase) + '/mo', align: 'right' }, { text: money(totalRecBase * 12), align: 'right' }],
+    [`+ 5 small deals (${money(avgSmallDealGP)}/mo avg)`, { text: money(totalRecBase + 5 * avgSmallDealGP) + '/mo', align: 'right', color: BRAND.green }, { text: money((totalRecBase + 5 * avgSmallDealGP) * 12), align: 'right', color: BRAND.green }],
+    [`+ 10 small deals (${money(avgSmallDealGP)}/mo avg)`, { text: money(totalRecBase + 10 * avgSmallDealGP) + '/mo', align: 'right', color: BRAND.green }, { text: money((totalRecBase + 10 * avgSmallDealGP) * 12), align: 'right', color: BRAND.green }],
+    [`+ 15 small deals (${money(avgSmallDealGP)}/mo avg)`, { text: money(totalRecBase + 15 * avgSmallDealGP) + '/mo', align: 'right', color: BRAND.green }, { text: money((totalRecBase + 15 * avgSmallDealGP) * 12), align: 'right', color: BRAND.green }],
+  ];
+  y = drawTable(
+    pdf, y, margin, contentW,
+    ['Scenario', { text: 'Monthly Rec GP', align: 'right' }, { text: 'Annual Rec GP', align: 'right' }],
+    smallDealScenarios,
+    { headColor: BRAND.green, colWidths: [70, 50, 50], pageH },
+  );
+
+  bullet(`Even modest lead generation success — 5 new small deals — would add ${money(5 * avgSmallDealGP)}/mo (${money(5 * avgSmallDealGP * 12)}/yr) to the recurring base and reduce dependency on large deal conversion.`, BRAND.green);
+  bullet(`Building this pipeline now means these deals start billing in Q1/Q2 of the new FY, compounding through the Rule of 78 across the full year.`, BRAND.accent);
+
   pdf.addPage();
   y = margin;
   pdf.setFontSize(18);
