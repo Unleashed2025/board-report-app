@@ -1346,7 +1346,7 @@ export default function OverviewPage() {
 
               const cashflowSection = (
                 <div className={`${card} mt-6 mb-6 border-l-4 border-l-[#0EA5E9]`}>
-                  <p className="text-white font-semibold mb-1 text-sm">💰 Cashflow Runway - {fy.newLabel}</p>
+                  <p className="text-white font-semibold mb-1 text-sm">💰 Total Pipeline Conversion Cashflow Runway - {fy.newLabel}</p>
                   <p className="text-[#5A7A95] text-[10px] mb-4 italic">
                     Cumulative cash position month-by-month. NR GP (e.g. {money(decCashflow)} in Dec) creates a buffer that offsets the gap between recurring GP and costs.
                     Shows when the buffer runs out and how much new business must be billing to stay positive.
@@ -1391,7 +1391,7 @@ export default function OverviewPage() {
                           <th className="text-right py-1">Costs</th>
                           <th className="text-right py-1">Monthly Net</th>
                           <th className="text-right py-1">Cash Balance</th>
-                          <th className="text-right py-1">Secured Only</th>
+                          <th className="text-right py-1" title="Independent calculation using only base recurring + Closed Won deals. Ignores all pipeline.">Secured Only *</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1446,6 +1446,10 @@ export default function OverviewPage() {
                         ✓ Even without closing any pipeline deals, secured revenue covers costs all FY.
                       </p>
                     )}
+                    <p className="text-[#5A7A95] text-[10px] mt-3 italic">
+                      * Secured Only is a separate calculation that only includes base recurring GP (£{Math.round(baseRecGP).toLocaleString()}/mo) + Closed Won deals. 
+                      It ignores all Negotiating, Quoting and Lead pipeline. The other columns include all pipeline stages.
+                    </p>
                   </div>
                 </div>
               );
@@ -1608,7 +1612,8 @@ export default function OverviewPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
               {/* WITHOUT Alysha */}
               <div className={`${card} border-l-4 border-l-[#f59e0b]`}>
-               <p className="text-white font-semibold text-sm mb-3">Without Alysha</p>
+               <p className="text-white font-semibold text-sm mb-1">Without Alysha</p>
+                <p className="text-[#5A7A95] text-[10px] mb-3 italic">Closed Won + Negotiating deals only. No quoting or lead pipeline included.</p>
                <div className="overflow-x-auto">
                  <table className="w-full text-[11px]">
                    <thead>
@@ -1665,7 +1670,8 @@ export default function OverviewPage() {
 
               {/* WITH Alysha */}
               <div className={`${card} border-l-4 border-l-[#a855f7]`}>
-               <p className="text-white font-semibold text-sm mb-3">With Alysha</p>
+               <p className="text-white font-semibold text-sm mb-1">With Alysha</p>
+                <p className="text-[#5A7A95] text-[10px] mb-3 italic">Closed Won + Negotiating deals plus Alysha's predicted £1k/mo recurring + £5k/mo NR from January.</p>
                <div className="overflow-x-auto">
                  <table className="w-full text-[11px]">
                    <thead>
